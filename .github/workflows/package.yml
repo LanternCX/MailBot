@@ -1,0 +1,157 @@
+name: Cross-platform Release
+
+# Display the Tag Name (e.g., "v1.0.0") as the workflow run title
+run-name: Release ${{ github.ref_name }}
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ==================================================
+  # JOB 1: Build Binaries
+  # ==================================================
+  build:
+    name: Build ${{ matrix.tag }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows (Standard x64)
+          - runner: windows-latest
+            os: windows
+            python: "3.10"
+            arch: x64
+            tag: windows-x64
+
+          # macOS (Apple Silicon M1/M2/M3) - Mainstream
+          - runner: macos-latest
+            os: macos
+            python: "3.10"
+            arch: arm64
+            tag: macos-arm64
+
+          # Linux (Standard x64 Server/Desktop)
+          - runner: ubuntu-latest
+            os: ubuntu
+            python: "3.10"
+            arch: x64
+            tag: linux-x64
+
+          # Linux (ARM64 for Raspberry Pi / Oracle Cloud)
+          # Note: Uses GitHub's new ARM runner
+          - runner: ubuntu-24.04-arm
+            os: ubuntu
+            python: "3.10"
+            arch: arm64
+            tag: linux-arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Resolve Version ID
+      - name: Resolve Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=nightly-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.arch }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      # Build Command
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller --clean --onefile \
+            --collect-all rich \
+            --name "mailbot-${{ matrix.tag }}" main.py
+
+      # Bundle binary and create default config
+      - name: Bundle binary and config
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BUNDLE="mailbot-${VERSION}-${{ matrix.tag }}"
+          
+          # Locate the binary (handles .exe on Windows automatically)
+          BIN_SRC=$(ls dist/mailbot-* | head -n 1)
+          
+          mkdir -p bundle/$BUNDLE
+          cp "$BIN_SRC" "bundle/$BUNDLE/"
+          
+          # Create default config.json
+          cat > "bundle/$BUNDLE/config.json" <<'EOF'
+          {
+            "poll_interval": 60,
+            "max_retries": 3,
+            "log_level": "INFO",
+            "accounts": [],
+            "notifiers": []
+          }
+          EOF
+          
+          # Zip the bundle using Python (cross-platform way)
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+
+          bundle_root = Path("bundle")
+          for pkg_dir in bundle_root.iterdir():
+              if pkg_dir.is_dir():
+                  shutil.make_archive(str(pkg_dir), "zip", root_dir=pkg_dir)
+          PY
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mailbot-${{ steps.version.outputs.VERSION }}-${{ matrix.tag }}
+          path: bundle/*.zip
+          if-no-files-found: error
+
+  # ==================================================
+  # JOB 2: Publish Release
+  # ==================================================
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mailbot-*
+          path: release_assets
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MailBot ${{ github.ref_name }} # Title of the Release page
+          files: release_assets/*
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,18 +13,26 @@ No YAML editing required — just run the executable or `main.py` and follow the
 
 ## ✨ Features
 
+- **Mail Forwarding**: Forwards new emails that arrive after the script starts into your bot chat.
 - **Interactive Setup**: Add accounts and configure your bot via a clear CLI wizard.
-- **Multi-Account**: Monitor multiple IMAP accounts simultaneously.
+- **Multi-Account**: Monitor multiple IMAP accounts and relay to multiple bot recipients (currently Telegram only).
 - **Smart Parsing**: Extracts clean text from HTML emails.
-- **Secure Storage**: Credentials encrypted locally (optional).
 - **Docker Friendly**: Supports headless mode for server deployments.
-- **Forward New Only**: Forwards only new emails arriving after the script starts, avoiding spam from history.
 
 ## 🚀 Quick Start
 
 ### Method 1: Executable (Recommended)
 
-Download the latest release for your OS from [Releases](../../releases) and run it directly.
+Download the latest release for your OS from [Releases](../../releases) and run it directly. If macOS Gatekeeper blocks the binary, run the following once before the first launch:
+
+```bash
+xattr -d com.apple.quarantine ./mailbot-macos-arm64
+./mailbot-macos-arm64
+```
+
+or open the binary via Finder (Cmd+Click → Open) and click “Open” in the warning dialog; macOS will remember the approval.
+
+Running the executable launches the CLI menu; follow the wizard to add mailboxes, enter your Bot Token/Chat ID, and tweak system settings. See the [Setup Guide](docs/setup_guide.md) and [Configuration](docs/configuration.md) for the full walkthrough.
 
 ### Method 2: From Source
 
@@ -43,6 +51,9 @@ python main.py
 
 - **[Configuration](docs/configuration.md)**  
   Detailed explanation of menu options, system settings (polling, retries), and headless mode.
+
+- **Contribute**  
+  Send a PR or open an issue with improvements, configuration samples, or bug reports—every contribution helps MailBot better support diverse scenarios.
 
 ---
 

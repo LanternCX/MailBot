@@ -1,0 +1,41 @@
+{
+  "poll_interval": 60,
+  "max_retries": 3,
+  "log_level": "INFO",
+  "accounts": [
+    {
+      "name": "Gmail 工作邮箱",
+      "email": "your-email@gmail.com",
+      "password": "your-app-specific-password",
+      "imap_host": "imap.gmail.com",
+      "imap_port": 993,
+      "use_ssl": true,
+      "folders": ["INBOX"],
+      "enabled": true,
+      "web_url": ""
+    },
+    {
+      "name": "Outlook 个人邮箱",
+      "email": "your-email@outlook.com",
+      "password": "your-password",
+      "imap_host": "outlook.office365.com",
+      "imap_port": 993,
+      "use_ssl": true,
+      "folders": ["INBOX"],
+      "enabled": false,
+      "web_url": ""
+    }
+  ],
+  "notifiers": [
+    {
+      "type": "telegram",
+      "enabled": true,
+      "telegram": {
+        "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+        "chat_id": "your-chat-id",
+        "api_base": "https://api.telegram.org",
+        "timeout": 30
+      }
+    }
+  ]
+}

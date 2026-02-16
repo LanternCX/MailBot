@@ -1,0 +1,20 @@
+# MailBot Dependencies
+# Python 3.10+
+
+# Interactive CLI
+questionary>=2.0.0
+rich>=13.7.0
+
+# Email Protocol
+imap-tools>=1.5.0
+
+# HTML Parsing
+beautifulsoup4>=4.12.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Configuration & Validation
+pydantic>=2.5.0
+# types-requests>=2.31.0
+# types-beautifulsoup4>=4.12.0

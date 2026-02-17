@@ -28,7 +28,9 @@ from utils.logger import setup_logging
 
 logger = logging.getLogger("mailbot.main")
 
-DEFAULT_CONFIG = PROJECT_ROOT / "config.json"
+def default_config_path() -> Path:
+    """Config path in the current working directory."""
+    return Path.cwd() / "config.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,8 +42,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-c", "--config",
         type=str,
-        default=str(DEFAULT_CONFIG),
-        help="Config file path (default: config.json)",
+        default=str(default_config_path()),
+        help="Config file path (default: config.json in current directory)",
     )
     parser.add_argument(
         "--headless",

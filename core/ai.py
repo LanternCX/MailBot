@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 from pathlib import Path
 
 from core.models import AIAnalysisResult, AIConfig
@@ -146,6 +147,28 @@ def build_system_prompt(config: AIConfig, rules_block: str | None = None) -> str
 #  Core helpers
 # ──────────────────────────────────────────────
 
+def _patch_litellm_cost_map(exc: FileNotFoundError) -> None:
+    """Create missing litellm JSON data files so the module can be re-imported.
+
+    In a PyInstaller --onefile bundle the temporary extraction directory may
+    lack non-Python resource files that litellm reads at import time.  This
+    helper writes an empty ``{}`` placeholder so the second import succeeds.
+    """
+    missing = getattr(exc, "filename", "") or ""
+    if "model_prices_and_context_window" in missing:
+        path = Path(missing)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+        logger.debug("Created placeholder litellm cost map: %s", path)
+    else:
+        logger.debug("Unexpected litellm FileNotFoundError: %s", exc)
+
+
+def _is_pyinstaller_bundle() -> bool:
+    """Return True when running inside a PyInstaller frozen bundle."""
+    return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+
+
 def _default_result() -> AIAnalysisResult:
     """Return a safe default when AI analysis fails."""
     return AIAnalysisResult()
@@ -224,6 +247,7 @@ def analyze_email(
 
     try:
         import litellm  # lazy import to avoid hard dependency
+
         from utils.logger import adopt_dependency_loggers, get_active_log_level
 
         litellm.drop_params = True  # ignore unsupported params per provider
@@ -231,6 +255,16 @@ def analyze_email(
     except ImportError:
         logger.error("litellm not installed — run: pip install litellm")
         return _default_result()
+    except FileNotFoundError as exc:
+        # PyInstaller bundle may lack litellm data files; patch and retry.
+        _patch_litellm_cost_map(exc)
+        try:
+            import litellm  # type: ignore[reimported]  # noqa: F811
+
+            litellm.drop_params = True
+        except Exception:
+            logger.error("litellm data files missing and could not be recreated")
+            return _default_result()
 
     # Truncate body to ~2000 chars for cost and latency
     truncated_body = body[:2000] if len(body) > 2000 else body

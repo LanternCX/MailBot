@@ -49,3 +49,71 @@ MailBot 默认在当前工作目录查找 `config.json`；如果希望指定其�
 对于其他服务商 (Outlook, Yahoo, iCloud 等)，请确保：
 1.  在账号设置中开启了 **IMAP 访问**。
 2.  如果开启了两步验证 (强烈建议)，请使用 **应用专用密码**。
+
+---
+
+## 本地 PyInstaller 打包与测试
+
+在推送到 GitHub Actions 之前，可以在本地构建单文件可执行程序来验证打包是否正确，尽早发现隐藏依赖或数据文件缺失等问题。
+
+### 前置条件
+
+```bash
+# 确保在项目根目录，且已激活 venv
+pip install pyinstaller
+pip install -r requirements.txt
+```
+
+### 构建完整二进制
+
+```bash
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --collect-all rich \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name MailBot main.py
+```
+
+可执行文件位于 `dist/MailBot`，运行：
+
+```bash
+./dist/MailBot --help
+./dist/MailBot --headless -c config.json
+```
+
+### 快速冒烟测试 (仅 litellm)
+
+项目提供了一个专用冒烟测试脚本，用于验证 litellm 在 PyInstaller bundle 中能否正常 import 并加载 cost-map 数据：
+
+```bash
+# 构建冒烟测试二进制
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name smoketest scripts/smoketest_litellm.py
+
+# 运行 — 应输出 "OK"
+./dist/smoketest
+```
+
+期望输出：
+
+```
+frozen=True  _MEIPASS=/var/folders/.../...
+OK — litellm <version> imported successfully
+model_cost type=dict  entries=NNNN
+```
+
+如果出现 `FAIL — FileNotFoundError` 或 `FAIL — ImportError`，说明打包参数或 `hooks/hook-litellm.py` 需要修复。
+
+### 或使用打包脚本
+
+```bash
+.venv/bin/python scripts/package.py --clean --entry main.py --variant macos-arm64
+```
+
+生成的 zip 包位于 `dist/macos-arm64/`。
+
+> **提示：** 测试完成后可用 `rm -rf dist/ build/` 清理构建产物。

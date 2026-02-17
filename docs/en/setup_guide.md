@@ -49,3 +49,71 @@ With the proxy enabled MailBot automatically sets the `http(s)_proxy` environmen
 For other providers (Outlook, Yahoo, iCloud, etc.), ensure that:
 1.  **IMAP Access** is enabled in your account settings.
 2.  You use an **App Password** if 2FA is enabled (highly recommended).
+
+---
+
+## Local PyInstaller Build & Testing
+
+You can build a single-file executable locally to verify packaging before pushing to GitHub Actions. This catches issues like missing hidden imports or data files early.
+
+### Prerequisites
+
+```bash
+# Make sure you are in the project root with the venv activated
+pip install pyinstaller
+pip install -r requirements.txt
+```
+
+### Build the Full Binary
+
+```bash
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --collect-all rich \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name MailBot main.py
+```
+
+The executable will be at `dist/MailBot`. Run it:
+
+```bash
+./dist/MailBot --help
+./dist/MailBot --headless -c config.json
+```
+
+### Quick Smoke Test (litellm only)
+
+A dedicated smoke-test script verifies that litellm imports and loads its cost-map data correctly inside a PyInstaller bundle:
+
+```bash
+# Build the smoke-test binary
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name smoketest scripts/smoketest_litellm.py
+
+# Run it — should print "OK"
+./dist/smoketest
+```
+
+Expected output:
+
+```
+frozen=True  _MEIPASS=/var/folders/.../...
+OK — litellm <version> imported successfully
+model_cost type=dict  entries=NNNN
+```
+
+If you see `FAIL — FileNotFoundError` or `FAIL — ImportError`, the packaging flags or `hooks/hook-litellm.py` need attention.
+
+### Or Use the Package Script
+
+```bash
+.venv/bin/python scripts/package.py --clean --entry main.py --variant macos-arm64
+```
+
+The resulting zip will be at `dist/macos-arm64/`.
+
+> **Tip:** Clean up test artifacts with `rm -rf dist/ build/` when done.

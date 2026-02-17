@@ -12,12 +12,14 @@ import time
 from pathlib import Path
 
 import questionary
+from pydantic import SecretStr
 from rich.console import Console
 
 from core.manager import ServiceManager
-from core.models import AppConfig
+from core.models import AppConfig, ProxyConfig
 from interface.wizard import account_wizard, bot_wizard
 from utils.helpers import (
+    apply_global_proxy,
     show_accounts_table,
     show_banner,
     show_bot_table,
@@ -49,6 +51,7 @@ MENU_CHOICES = [
 def main_menu(config_path: Path) -> None:
     """Run the interactive main-menu loop."""
     config = _load_or_default(config_path)
+    apply_global_proxy(config.proxy)
     show_banner()
 
     while True:
@@ -198,8 +201,63 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
         config.poll_interval = int(poll)
         config.max_retries = int(retries)
         config.log_level = log_level.upper()
+
+        # Proxy settings
+        use_proxy = questionary.confirm(
+            "Enable global proxy for IMAP/HTTP?",
+            default=bool(config.proxy and config.proxy.enabled),
+            qmark="▸",
+        ).ask()
+
+        if use_proxy:
+            scheme = questionary.select(
+                "Proxy scheme:",
+                choices=["socks5", "socks4", "http"],
+                default=(config.proxy.scheme if config.proxy else "socks5"),
+                qmark="▸",
+                pointer="›",
+            ).ask()
+
+            host = questionary.text(
+                "Proxy host:",
+                default=config.proxy.host if config.proxy else "",
+                validate=lambda v: bool(v) or "Host required",
+                qmark="▸",
+            ).ask()
+
+            port_str = questionary.text(
+                "Proxy port:",
+                default=str(config.proxy.port) if config.proxy else "1080",
+                validate=lambda v: v.isdigit() and 1 <= int(v) <= 65535 or "Enter 1-65535",
+                qmark="▸",
+            ).ask()
+
+            username = questionary.text(
+                "Proxy username (optional):",
+                default=config.proxy.username if config.proxy and config.proxy.username else "",
+                qmark="▸",
+            ).ask() or None
+
+            password = questionary.password(
+                "Proxy password (optional):",
+                default=(config.proxy.password.get_secret_value() if config.proxy and config.proxy.password else ""),
+                qmark="▸",
+            ).ask() or ""
+
+            config.proxy = ProxyConfig(
+                enabled=True,
+                scheme=scheme,
+                host=host,
+                port=int(port_str),
+                username=username,
+                password=SecretStr(password) if password else None,
+            )
+        else:
+            config.proxy = None
+
         config.save(config_path)
         setup_logging(level=config.log_level)
+        apply_global_proxy(config.proxy)
         console.print("[green]System settings saved.[/green]")
     else:
         console.print("[dim]No changes applied.[/dim]")

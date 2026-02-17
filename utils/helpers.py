@@ -6,11 +6,19 @@ Shared CLI helpers: banners, tables, formatting.
 
 from __future__ import annotations
 
+import os
+import socket
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from core.models import ProxyConfig
+
 console = Console()
+
+# Preserve the original socket class so we can restore when proxy is disabled
+_ORIGINAL_SOCKET = socket.socket
 
 BANNER = r"""
    __  ___      _ __  ____        __
@@ -84,3 +92,57 @@ def confirm_or_abort(msg: str = "Continue?") -> bool:
     """Quick y/n confirmation via Rich prompt."""
     answer = console.input(f"[yellow]{msg} [y/N]: [/]").strip().lower()
     return answer in ("y", "yes")
+
+
+def apply_global_proxy(proxy: ProxyConfig | None) -> None:
+    """Apply or clear a global proxy for HTTP (requests) and IMAP (socket).
+
+    This sets HTTP(S)_PROXY environment variables and, when enabled, monkey-patches
+    the default socket to route IMAP (imaplib) traffic through the proxy using PySocks.
+    """
+    global _ORIGINAL_SOCKET
+
+    # Helper to restore default socket
+    def _restore_socket() -> None:
+        if socket.socket is not _ORIGINAL_SOCKET:
+            socket.socket = _ORIGINAL_SOCKET
+
+    # Clear env proxies first
+    for key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        os.environ.pop(key, None)
+
+    if not proxy or not proxy.enabled:
+        _restore_socket()
+        return
+
+    try:
+        import socks  # type: ignore
+    except Exception:
+        console.print("[red]Proxy requested but PySocks is missing. Install with: pip install PySocks[/red]")
+        _restore_socket()
+        return
+
+    proxy_url = proxy.as_url()
+    os.environ["http_proxy"] = proxy_url
+    os.environ["https_proxy"] = proxy_url
+    os.environ["HTTP_PROXY"] = proxy_url
+    os.environ["HTTPS_PROXY"] = proxy_url
+
+    scheme = proxy.scheme.lower()
+    if scheme == "socks5":
+        socks_type = socks.SOCKS5
+    elif scheme == "socks4":
+        socks_type = socks.SOCKS4
+    else:
+        socks_type = socks.HTTP
+
+    socks.set_default_proxy(
+        socks_type,
+        addr=proxy.host,
+        port=proxy.port,
+        username=proxy.username,
+        password=proxy.password.get_secret_value() if proxy.password else None,
+    )
+
+    # Route all future socket connections through the proxy
+    socket.socket = socks.socksocket

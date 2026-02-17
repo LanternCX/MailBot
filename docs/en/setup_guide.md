@@ -1,5 +1,7 @@
 # Setup Guide
 
+MailBot looks for `config.json` in the current working directory by default; pass `-c PATH` / `--config PATH` when launching if you want to point at a different location. The CLI menu or headless run will create the file automatically if it is missing.
+
 ## Google/Gmail
 
 To use a Gmail account, you must enable **2-Step Verification** and generate an **App Password**.  
@@ -31,6 +33,16 @@ You need a Telegram Bot Token to send messages and your User ID (Chat ID) to rec
 4.  Enter this ID into MailBot when prompted.
 
 ---
+
+## Proxy & Network
+
+If your IMAP provider or Telegram endpoint must be reached via a SOCKS/HTTP proxy, add a `proxy` block to your configuration or enable it through the menu’s system settings. It supports:
+
+* `scheme`: `socks5`, `socks4`, or `http`
+* `host`/`port`: address of the proxy
+* `username` / `password`: optional credentials
+
+With the proxy enabled MailBot automatically sets the `http(s)_proxy` environment variables and routes IMAP sockets through the proxy so all network traffic (IMAP fetching + Telegram API) obeys it. Use the CLI wizard’s system settings if you prefer an interactive form.
 
 ## Other Email Providers
 

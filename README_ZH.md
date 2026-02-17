@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[中文](README.md) | [English](README_EN.md)
+[中文](README_ZH.md) | [English](README.md)
 
 > 一个简单易用的 IMAP 邮件转发 Telegram 机器人。
 >
@@ -29,14 +29,43 @@
 
 ### 方式一：直接运行
 
-从 [Releases](../../releases) 下载对应系统的可执行文件，直接运行即可。macOS Gatekeeper 可能会阻止首次启动，执行下面两行命令可移除隔离属性并立即运行：
+1. **下载与解压**  
+   从 [Releases](../../releases/latest) 下载对应系统的发布包并解压。
 
-```bash
-xattr -d com.apple.quarantine ./mailbot-macos-arm64
-./mailbot-macos-arm64
-```
+   ```bash
+   # 示例：解压下载的文件
+   unzip mailbot-v1.0.0-macos-arm64.zip -d mailbot
+   cd mailbot
+   ```
 
-运行可执行文件后会进入命令行交互式菜单，按照向导添加邮箱、Bot Token/Chat ID、系统设置，即可完成配置；详细流程见 [安装指南](docs/setup_guide.md) 和 [配置说明](docs/configuration.md) 中的各节说明。
+2. **运行程序**  
+   直接执行二进制文件，首次运行会自动生成配置文件。
+
+   **Linux / Windows (PowerShell):**
+   ```bash
+   # Linux
+   chmod +x mailbot-linux-amd64
+   ./mailbot-linux-x64
+
+   # Windows
+   .\mailbot-windows-x64.exe
+   ```
+
+   **macOS (需要清除 Gatekeeper 属性):**
+   ```bash
+   # 移除隔离属性
+   xattr -d com.apple.quarantine mailbot-macos-arm64
+   
+   # 运行
+   ./mailbot-macos-arm64
+   ```
+
+3. **配置向导**  
+   跟随命令行交互向导，添加邮箱账户并设置 Bot Token。
+   ```bash
+   # 可选：指定特定配置文件启动
+   ./mailbot-macos-arm64 -c ./my_config.json
+   ```
 
 ### 方式二：源码运行
 
@@ -50,13 +79,13 @@ python main.py
 
 ## 📖 文档
 
-- **[安装指南 (Setup Guide)](docs/setup_guide.md)**  
+- **[安装指南](docs/zh/setup_guide.md)**  
   包含 Gmail/Google App Password 获取教程，以及 Telegram Bot 申请与 User ID 获取方法。
 
-- **[配置说明 (Configuration)](docs/configuration.md)**  
+- **[配置说明](docs/zh/configuration.md)**  
   详细介绍菜单选项、系统设置（轮询间隔、重试次数等）及 Headless 模式。
 
-- **欢迎贡献 (Contribute)**  
+- **欢迎贡献**  
   欢迎通过 PR 或 Issue 提交改进建议、配置示例或 Bug 报告，所有反馈都能帮助 MailBot 更好地适配更多场景。
 
 ## 🖥 菜单概览

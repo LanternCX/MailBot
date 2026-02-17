@@ -26,16 +26,43 @@ No YAML editing required — just run the executable or `main.py` and follow the
 
 ### Method 1: Executable (Recommended)
 
-Download the latest release for your OS from [Releases](../../releases) and run it directly. If macOS Gatekeeper blocks the binary, run the following once before the first launch:
+1. **Download & Unzip**  
+   Get the release package from [Releases](../../releases/latest) and extract it.
 
-```bash
-xattr -d com.apple.quarantine ./mailbot-macos-arm64
-./mailbot-macos-arm64
-```
+   ```bash
+   # Example: Unzip the downloaded file
+   unzip mailbot-v1.0.0-macos-arm64.zip -d mailbot
+   cd mailbot
+   ```
 
-or open the binary via Finder (Cmd+Click → Open) and click “Open” in the warning dialog; macOS will remember the approval.
+2. **Run Application**  
+   Execute the binary. The `config.json` will be created automatically if missing.
 
-Running the executable launches the CLI menu; follow the wizard to add mailboxes, enter your Bot Token/Chat ID, and tweak system settings. See the [Setup Guide](docs/setup_guide.md) and [Configuration](docs/configuration.md) for the full walkthrough.
+   **Linux / Windows (PowerShell):**
+   ```bash
+   # Linux
+   chmod +x mailbot-linux-amd64
+   ./mailbot-linux-amd64
+
+   # Windows
+   .\mailbot-windows-amd64.exe
+   ```
+
+   **macOS (Requires Gatekeeper clearance):**
+   ```bash
+   # Remove quarantine attribute
+   xattr -d com.apple.quarantine mailbot-macos-arm64
+   
+   # Run
+   ./mailbot-macos-arm64
+   ```
+
+3. **Configure**  
+   Follow the interactive wizard to add accounts and set up the bot.
+   ```bash
+   # Optional: Load a specific config file
+   ./mailbot-macos-arm64 -c ./my_config.json
+   ```
 
 ### Method 2: From Source
 
@@ -49,10 +76,10 @@ python main.py
 
 ## 📖 Documentation
 
-- **[Setup Guide](docs/setup_guide.md)**  
+- **[Setup Guide](docs/en/setup_guide.md)**  
   Get your Google App Password, create a Telegram Bot, and find your Chat ID.
 
-- **[Configuration](docs/configuration.md)**  
+- **[Configuration](docs/en/configuration.md)**  
   Detailed explanation of menu options, system settings (polling, retries), and headless mode.
 
 - **Contribute**  

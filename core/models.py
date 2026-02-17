@@ -133,6 +133,10 @@ class AIConfig(BaseModel):
         default=OperationMode.HYBRID,
         description="Default operation mode: raw / hybrid / agent",
     )
+    language: str = Field(
+        default="auto",
+        description="Output language: zh / en / ja / auto (detect from email)",
+    )
 
 
 class NotifierConfig(BaseModel):
@@ -227,7 +231,7 @@ class EmailSnapshot(BaseModel):
 
 class AIAnalysisResult(BaseModel):
     """Structured AI analysis result for an email."""
-    summary: str = Field(default="Unable to generate summary", description="English summary (50-100 words)")
+    summary: str = Field(default="Unable to generate summary", description="Summary (50-100 words)")
     category: str = Field(
         default="notification",
         description="Category: verification_code/notification/billing/promotion/personal",
@@ -236,6 +240,14 @@ class AIAnalysisResult(BaseModel):
     extracted_code: str | None = Field(
         default=None,
         description="Extracted verification code / pickup code / token",
+    )
+    translation: str | None = Field(
+        default=None,
+        description="Translation of email body when source language differs from target",
+    )
+    source_language: str | None = Field(
+        default=None,
+        description="Detected source language of the email (e.g. en, zh, ja)",
     )
 
 

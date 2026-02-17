@@ -303,11 +303,13 @@ class ServiceManager:
             # Agent mode: always run AI
             if current_mode == OperationMode.AGENT:
                 from core.ai import analyze_email
+                rules_block = self._bot_handler.rules_block if self._bot_handler else None
                 ai_result = analyze_email(
                     subject=snapshot.subject,
                     sender=snapshot.sender,
                     body=snapshot.body_text,
                     config=self._config.ai,
+                    rules_block=rules_block,
                 )
 
         for notifier in self._notifiers:

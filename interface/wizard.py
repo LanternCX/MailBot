@@ -308,6 +308,22 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if mode_choice is None:
         mode_choice = "hybrid"
 
+    # Step 7: Output language
+    lang_choice = questionary.select(
+        "AI output language:",
+        choices=[
+            questionary.Choice("Auto-detect (match email language)", value="auto"),
+            questionary.Choice("Chinese (中文)", value="zh"),
+            questionary.Choice("English", value="en"),
+            questionary.Choice("Japanese (日本語)", value="ja"),
+        ],
+        default=existing.language,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if lang_choice is None:
+        lang_choice = "auto"
+
     return AIConfig(
         enabled=True,
         provider=provider,
@@ -315,4 +331,5 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
         model=model,
         base_url=base_url,
         default_mode=OperationMode(mode_choice),
+        language=lang_choice,
     )

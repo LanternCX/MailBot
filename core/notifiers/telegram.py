@@ -5,10 +5,10 @@ Telegram notifier implementation using Bot API.
 
 Supports:
 - Basic message sending
-- Inline keyboards
+- Inline keyboards (multi-level settings dashboard)
 - Message editing
 - Callback query answers
-- Mode-aware email formatting
+- Mode-aware email formatting with translation
 """
 
 from __future__ import annotations
@@ -37,6 +37,22 @@ CATEGORY_ICONS = {
     "billing": "💰",
     "promotion": "📣",
     "personal": "✉️",
+}
+
+# Language display metadata
+LANGUAGE_OPTIONS: list[tuple[str, str, str]] = [
+    # (code, flag+label, callback_data)
+    ("zh", "🇨🇳 中文", "lang_zh"),
+    ("en", "🇺🇸 English", "lang_en"),
+    ("ja", "🇯🇵 日本語", "lang_ja"),
+    ("auto", "🌐 Auto-detect", "lang_auto"),
+]
+
+LANGUAGE_LABELS: dict[str, str] = {code: label for code, label, _ in LANGUAGE_OPTIONS}
+MODE_LABELS: dict[OperationMode, str] = {
+    OperationMode.RAW: "Raw",
+    OperationMode.HYBRID: "Hybrid",
+    OperationMode.AGENT: "Agent",
 }
 
 
@@ -148,7 +164,7 @@ class TelegramNotifier(BaseNotifier):
         snapshot: EmailSnapshot,
         result: AIAnalysisResult,
     ) -> bool:
-        """Send structured AI analysis card."""
+        """Send structured AI analysis card (with optional translation)."""
         cat_icon = CATEGORY_ICONS.get(result.category, "📧")
         pri_label = PRIORITY_LABELS.get(result.priority, "🟡 Medium")
 
@@ -166,6 +182,10 @@ class TelegramNotifier(BaseNotifier):
         if result.extracted_code:
             lines.append(f"\n🔑 <b>Code</b>: <code>{self._escape_html(result.extracted_code)}</code>")
 
+        # Smart translation block (Feat 4)
+        if result.translation:
+            lines.append(f"\n🌐 <b>Translation</b>\n{self._escape_html(result.translation)}")
+
         if snapshot.web_link:
             lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
 
@@ -173,17 +193,23 @@ class TelegramNotifier(BaseNotifier):
         return self._send_text(text, parse_mode="HTML")
 
     # ──────────────────────────────────────────────
-    #  /mode dashboard
+    #  /settings dashboard (multi-level inline keyboard)
     # ──────────────────────────────────────────────
 
-    def send_mode_panel(self, current_mode: OperationMode, chat_id: str | None = None) -> dict | None:
+    def send_settings_panel(
+        self,
+        current_mode: OperationMode,
+        ai_enabled: bool,
+        language: str,
+        chat_id: str | None = None,
+    ) -> dict | None:
         """
-        Send the /mode inline keyboard panel.
+        Send the /settings main-menu inline keyboard panel.
 
         Returns the API response dict (contains message_id) or None on failure.
         """
-        text = self._build_mode_text(current_mode)
-        keyboard = self._build_mode_keyboard(current_mode)
+        text = self._build_settings_text(current_mode, ai_enabled, language)
+        keyboard = self._build_settings_main_keyboard(current_mode, ai_enabled, language)
 
         payload: dict[str, Any] = {
             "chat_id": chat_id or self._config.chat_id,
@@ -194,15 +220,17 @@ class TelegramNotifier(BaseNotifier):
 
         return self._api_call("sendMessage", payload)
 
-    def edit_mode_panel(
+    def edit_settings_main(
         self,
         chat_id: str,
         message_id: int,
         current_mode: OperationMode,
+        ai_enabled: bool,
+        language: str,
     ) -> bool:
-        """Edit an existing mode panel message to reflect new mode."""
-        text = self._build_mode_text(current_mode)
-        keyboard = self._build_mode_keyboard(current_mode)
+        """Edit an existing message to show the settings main menu."""
+        text = self._build_settings_text(current_mode, ai_enabled, language)
+        keyboard = self._build_settings_main_keyboard(current_mode, ai_enabled, language)
 
         payload: dict[str, Any] = {
             "chat_id": chat_id,
@@ -211,35 +239,133 @@ class TelegramNotifier(BaseNotifier):
             "parse_mode": "HTML",
             "reply_markup": keyboard,
         }
-
         result = self._api_call("editMessageText", payload)
         return result is not None
 
-    @staticmethod
-    def _build_mode_text(mode: OperationMode) -> str:
-        labels = {
-            OperationMode.RAW: "Raw (forward only)",
-            OperationMode.HYBRID: "Hybrid (on-demand AI)",
-            OperationMode.AGENT: "Agent (always AI)",
+    def edit_settings_language_submenu(
+        self,
+        chat_id: str,
+        message_id: int,
+        current_language: str,
+    ) -> bool:
+        """Edit message in-place to show the language selection sub-menu."""
+        current_label = LANGUAGE_LABELS.get(current_language, current_language)
+        text = (
+            "🌐 <b>Language Settings</b>\n\n"
+            f"Current: ✅ <b>{current_label}</b>\n\n"
+            "Select output language:"
+        )
+
+        buttons: list[list[dict]] = []
+        row: list[dict] = []
+        for code, label, cb_data in LANGUAGE_OPTIONS:
+            display = f"✅ {label}" if code == current_language else label
+            row.append({"text": display, "callback_data": cb_data})
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        buttons.append([{"text": "🔙 Back", "callback_data": "settings_back"}])
+        keyboard = {"inline_keyboard": buttons}
+
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": keyboard,
         }
-        current = labels.get(mode, str(mode.value))
+        result = self._api_call("editMessageText", payload)
+        return result is not None
+
+    def edit_settings_mode_submenu(
+        self,
+        chat_id: str,
+        message_id: int,
+        current_mode: OperationMode,
+    ) -> bool:
+        """Edit message in-place to show the mode selection sub-menu."""
+        current_label = MODE_LABELS.get(current_mode, current_mode.value)
+        text = (
+            "⚙️ <b>Operation Mode</b>\n\n"
+            f"Current: ✅ <b>{current_label}</b>\n\n"
+            "Select mode:"
+        )
+
+        buttons: list[list[dict]] = []
+        for m, label in MODE_LABELS.items():
+            display = f"✅ {label}" if m == current_mode else label
+            buttons.append([{"text": display, "callback_data": f"mode_{m.value}"}])
+
+        buttons.append([{"text": "🔙 Back", "callback_data": "settings_back"}])
+        keyboard = {"inline_keyboard": buttons}
+
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": keyboard,
+        }
+        result = self._api_call("editMessageText", payload)
+        return result is not None
+
+    def delete_message(self, chat_id: str, message_id: int) -> bool:
+        """Delete a message by ID."""
+        payload = {"chat_id": chat_id, "message_id": message_id}
+        return self._api_call("deleteMessage", payload) is not None
+
+    # ── Settings panel builders ──
+
+    @staticmethod
+    def _build_settings_text(
+        mode: OperationMode,
+        ai_enabled: bool,
+        language: str,
+    ) -> str:
+        mode_label = MODE_LABELS.get(mode, mode.value)
+        lang_label = LANGUAGE_LABELS.get(language, language)
+        ai_status = "🟢 On" if ai_enabled else "🔴 Off"
         return (
-            "⚙️ <b>MailBot Operation Mode</b>\n\n"
-            f"Current mode: ✅ <b>{current}</b>\n\n"
-            "Tap a button to switch mode:"
+            "⚙️ <b>MailBot Settings</b>\n\n"
+            f"🌐 Language: <b>{lang_label}</b>\n"
+            f"📋 Mode: <b>{mode_label}</b>\n"
+            f"🤖 AI: <b>{ai_status}</b>"
         )
 
     @staticmethod
-    def _build_mode_keyboard(mode: OperationMode) -> dict:
-        buttons = []
-        for m, label in [
-            (OperationMode.RAW, "Raw"),
-            (OperationMode.HYBRID, "Hybrid"),
-            (OperationMode.AGENT, "Agent"),
-        ]:
-            text = f"✅ {label}" if m == mode else label
-            buttons.append({"text": text, "callback_data": f"mode_{m.value}"})
-        return {"inline_keyboard": [buttons]}
+    def _build_settings_main_keyboard(
+        mode: OperationMode,
+        ai_enabled: bool,
+        language: str,
+    ) -> dict:
+        mode_label = MODE_LABELS.get(mode, mode.value)
+        ai_toggle_text = "🟢 AI: On" if ai_enabled else "🔴 AI: Off"
+        return {
+            "inline_keyboard": [
+                [{"text": "🌐 Language >", "callback_data": "settings_lang"}],
+                [{"text": f"⚙️ Mode: {mode_label} >", "callback_data": "settings_mode"}],
+                [{"text": ai_toggle_text, "callback_data": "settings_ai_toggle"}],
+                [{"text": "❌ Close", "callback_data": "settings_close"}],
+            ]
+        }
+
+    # ── Legacy compat: keep send_mode_panel / edit_mode_panel as thin wrappers ──
+
+    def send_mode_panel(self, current_mode: OperationMode, chat_id: str | None = None) -> dict | None:
+        """Backward-compat: redirect to settings panel."""
+        return self.send_settings_panel(current_mode, True, "auto", chat_id)
+
+    def edit_mode_panel(
+        self,
+        chat_id: str,
+        message_id: int,
+        current_mode: OperationMode,
+    ) -> bool:
+        """Backward-compat: redirect to settings main."""
+        return self.edit_settings_main(chat_id, message_id, current_mode, True, "auto")
 
     # ──────────────────────────────────────────────
     #  /ai reply analysis

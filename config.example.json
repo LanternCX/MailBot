@@ -44,6 +44,7 @@
     "api_key": "sk-your-api-key",
     "model": "gpt-4o-mini",
     "base_url": null,
-    "default_mode": "hybrid"
+    "default_mode": "hybrid",
+    "language": "auto"
   }
 }

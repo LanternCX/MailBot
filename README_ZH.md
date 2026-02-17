@@ -13,7 +13,11 @@
 
 ---
 
-## ✨ 功能特性 (Features)
+## 🎬 功能预览
+
+![预览](./docs/img/preview.png)
+
+## ✨ 功能特性
 
 - **邮件转发**：转发脚本启动后邮箱列表中收到的新邮件到聊天机器人中。
 - **交互式配置**：通过命令行向导添加账户、设置 Bot，无需直接修改 JSON。
@@ -21,9 +25,9 @@
 - **HTML 解析**：智能提取邮件正文，去除冗余标签。
 - **Docker 友好**：支持 Headless 模式运行。
 
-## 🚀 快速开始 (Quick Start)
+## 🚀 快速开始
 
-### 方式一：直接运行 (Executable)
+### 方式一：直接运行
 
 从 [Releases](../../releases) 下载对应系统的可执行文件，直接运行即可。macOS Gatekeeper 可能会阻止首次启动，执行下面两行命令可移除隔离属性并立即运行：
 
@@ -34,7 +38,7 @@ xattr -d com.apple.quarantine ./mailbot-macos-arm64
 
 运行可执行文件后会进入命令行交互式菜单，按照向导添加邮箱、Bot Token/Chat ID、系统设置，即可完成配置；详细流程见 [安装指南](docs/setup_guide.md) 和 [配置说明](docs/configuration.md) 中的各节说明。
 
-### 方式二：源码运行 (Source)
+### 方式二：源码运行
 
 ```bash
 git clone https://github.com/your-username/MailBot.git
@@ -44,7 +48,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## 📖 文档 (Documentation)
+## 📖 文档
 
 - **[安装指南 (Setup Guide)](docs/setup_guide.md)**  
   包含 Gmail/Google App Password 获取教程，以及 Telegram Bot 申请与 User ID 获取方法。
@@ -55,7 +59,7 @@ python main.py
 - **欢迎贡献 (Contribute)**  
   欢迎通过 PR 或 Issue 提交改进建议、配置示例或 Bug 报告，所有反馈都能帮助 MailBot 更好地适配更多场景。
 
-## 🖥 菜单概览 (Menu)
+## 🖥 菜单概览
 
 ```text
 ▸ Start Service      — 启动服务（前台运行，实时日志）
@@ -66,7 +70,7 @@ python main.py
 ▸ Exit               — 退出
 ```
 
-## 🏗 项目结构 (Project Structure)
+## 🏗 项目结构
 
 ```text
 MailBot/

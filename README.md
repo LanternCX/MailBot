@@ -10,6 +10,9 @@
 No YAML editing required — just run the executable or `main.py` and follow the menu.
 
 ---
+## 🎬 Preview
+
+![Preview](./docs/img/preview.png)
 
 ## ✨ Features
 

@@ -31,7 +31,17 @@ Configure your Telegram notification channel.
 *   **Enter User ID**: Your Telegram user ID (Chat ID).
 *   **Enter Token**: The API token from BotFather.
 
-### 3. System Settings
+### 3. AI Settings
+
+Configure AI analysis through LiteLLM with a two-level menu.
+*   **Enable/Disable**: Turn AI analysis on or off.
+*   **Provider Group → Platform**: Pick a group, then a specific platform. Presets cover OpenAI/OpenRouter/Together/Fireworks, Anthropic/Gemini/Mistral/Groq, DeepSeek/Qwen/Moonshot/Minimax, Perplexity/Cohere, plus Ollama and custom OpenAI-compatible endpoints.
+*   **API Key**: Prompted only when required by the selected platform.
+*   **Model**: Override the default model name shown in the menu.
+*   **Base URL**: Editable for Ollama, OpenRouter, Together, Fireworks, and custom OpenAI-compatible endpoints.
+*   **Default Mode & Language**: Choose Raw/Hybrid/Agent and the output language behavior.
+
+### 4. System Settings
 
 Customize the behavior of the mail fetcher.
 *   **Polling Interval**: How often (in seconds) to check for new emails. (Default: 60s, Min: 10s)

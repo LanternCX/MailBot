@@ -124,7 +124,7 @@ class AIConfig(BaseModel):
     enabled: bool = Field(default=False, description="Whether AI analysis is enabled")
     provider: str = Field(
         default="openai",
-        description="LLM provider: openai / deepseek / ollama / custom",
+        description="LLM provider id supported by litellm (e.g. openai, deepseek, anthropic, groq, ollama)",
     )
     api_key: SecretStr | None = Field(default=None, description="LLM API key")
     model: str = Field(default="gpt-4o-mini", description="Model name, e.g. gpt-4o-mini")

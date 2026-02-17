@@ -222,12 +222,45 @@ def _verify_imap(acc: AccountConfig) -> None:
 
 # ── AI Configuration ──
 
-AI_PROVIDERS: dict[str, dict[str, str]] = {
-    "OpenAI": {"provider": "openai", "model": "gpt-4o-mini"},
-    "DeepSeek": {"provider": "deepseek", "model": "deepseek-chat"},
-    "Ollama": {"provider": "ollama", "model": "llama3"},
-    "Custom": {"provider": "custom", "model": ""},
+ProviderOption = dict[str, object]
+
+AI_PROVIDER_GROUPS: dict[str, list[ProviderOption]] = {
+    "OpenAI & Compatible": [
+        {"name": "OpenAI", "provider": "openai", "model": "gpt-4o-mini", "requires_api_key": True},
+        {"name": "OpenRouter", "provider": "openrouter", "model": "openrouter/auto", "base_url": "https://openrouter.ai/api/v1"},
+        {"name": "Together AI", "provider": "together_ai", "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "base_url": "https://api.together.xyz/v1"},
+        {"name": "Fireworks AI", "provider": "fireworks_ai", "model": "accounts/fireworks/models/llama-v3p1-70b-instruct", "base_url": "https://api.fireworks.ai/inference/v1"},
+    ],
+    "Frontier Models": [
+        {"name": "Anthropic", "provider": "anthropic", "model": "claude-3-5-sonnet-latest", "requires_api_key": True},
+        {"name": "Google Gemini", "provider": "gemini", "model": "gemini-1.5-flash", "requires_api_key": True},
+        {"name": "Mistral", "provider": "mistral", "model": "mistral-large-latest", "requires_api_key": True},
+        {"name": "Groq", "provider": "groq", "model": "llama-3.1-70b-versatile", "requires_api_key": True},
+    ],
+    "China-Friendly": [
+        {"name": "DeepSeek", "provider": "deepseek", "model": "deepseek-chat", "requires_api_key": True},
+        {"name": "Qwen (Ali Tongyi)", "provider": "qwen", "model": "qwen2-72b-instruct", "requires_api_key": True},
+        {"name": "Moonshot", "provider": "moonshot", "model": "moonshot-v1-32k", "requires_api_key": True},
+        {"name": "MiniMax", "provider": "minimax", "model": "abab6.5s-chat", "requires_api_key": True},
+    ],
+    "Research / Web": [
+        {"name": "Perplexity", "provider": "perplexity", "model": "pplx-70b-online", "requires_api_key": True},
+        {"name": "Cohere", "provider": "cohere", "model": "command-r-plus", "requires_api_key": True},
+    ],
+    "Local & Custom": [
+        {"name": "Ollama (local)", "provider": "ollama", "model": "llama3", "requires_api_key": False, "base_url": "http://localhost:11434", "allow_base_url": True},
+        {"name": "OpenAI-Compatible (custom)", "provider": "custom", "model": "gpt-4o-mini", "requires_api_key": True, "allow_base_url": True},
+    ],
 }
+
+
+def _find_provider_option(provider: str) -> tuple[str | None, ProviderOption | None]:
+    """Locate the provider option by provider id to pre-select defaults."""
+    for group_name, options in AI_PROVIDER_GROUPS.items():
+        for opt in options:
+            if opt.get("provider") == provider:
+                return group_name, opt
+    return None, None
 
 
 def ai_wizard(config: AppConfig) -> AIConfig | None:
@@ -248,24 +281,50 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if not enabled:
         return AIConfig(enabled=False)
 
-    # Step 2: Provider
-    provider_name = questionary.select(
-        "Select AI provider:",
-        choices=list(AI_PROVIDERS.keys()),
+    # Step 2: Provider group → provider
+    existing_group, existing_opt = _find_provider_option(existing.provider)
+    group_names = list(AI_PROVIDER_GROUPS.keys())
+    provider_group = questionary.select(
+        "Select provider group:",
+        choices=group_names,
+        default=existing_group or group_names[0],
         qmark="▸",
         pointer="›",
     ).ask()
-    if provider_name is None:
+    if provider_group is None:
         return None
 
-    preset = AI_PROVIDERS[provider_name]
-    provider = preset["provider"]
-    default_model = preset["model"]
+    group_options = AI_PROVIDER_GROUPS[provider_group]
+    default_provider_id = str(
+        existing_opt.get("provider") if existing_opt and existing_group == provider_group else group_options[0]["provider"]
+    )
+    provider_id = questionary.select(
+        "Select AI platform:",
+        choices=[
+            questionary.Choice(
+                title=f"{opt['name']} ({opt['model']})",
+                value=str(opt["provider"]),
+            )
+            for opt in group_options
+        ],
+        default=default_provider_id,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if provider_id is None:
+        return None
 
-    # Step 3: API Key (not needed for Ollama)
+    preset: ProviderOption = next(opt for opt in group_options if opt["provider"] == provider_id)
+    provider = str(preset["provider"])
+    default_model = str(preset.get("model", ""))
+    requires_api_key = bool(preset.get("requires_api_key", True))
+    preset_base_url = str(preset.get("base_url", "")) or None
+    allow_base_url = bool(preset.get("allow_base_url", False) or preset_base_url)
+
+    # Step 3: API Key (respect provider requirements)
     api_key_str: str | None = None
-    if provider != "ollama":
-        existing_key = existing.api_key.get_secret_value() if existing.api_key else ""
+    if requires_api_key:
+        existing_key = existing.api_key.get_secret_value() if existing.api_key and existing.provider == provider else ""
         api_key_str = questionary.password(
             "API Key:",
             default=existing_key,
@@ -275,23 +334,26 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
             console.print("[yellow]Warning: No API key provided.[/yellow]")
 
     # Step 4: Model
+    model_default = existing.model if existing.provider == provider and existing.model else default_model
     model = questionary.text(
         "Model name:",
-        default=existing.model if existing.model != "gpt-4o-mini" else default_model,
+        default=model_default or "gpt-4o-mini",
         qmark="▸",
     ).ask()
     if not model:
         model = default_model or "gpt-4o-mini"
 
-    # Step 5: Base URL (for Ollama / custom proxy)
+    # Step 5: Base URL (for local/custom/proxy-capable endpoints)
     base_url: str | None = None
-    if provider in ("ollama", "custom"):
-        default_url = existing.base_url or ("http://localhost:11434" if provider == "ollama" else "")
+    if allow_base_url:
+        default_url = existing.base_url if existing.provider == provider else preset_base_url
         base_url = questionary.text(
             "API Base URL:",
-            default=default_url,
+            default=default_url or "",
             qmark="▸",
-        ).ask() or None
+        ).ask() or preset_base_url
+    else:
+        base_url = preset_base_url
 
     # Step 6: Default mode
     mode_choice = questionary.select(

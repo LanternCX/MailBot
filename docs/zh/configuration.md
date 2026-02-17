@@ -30,7 +30,17 @@ MailBot 提供交互式 CLI 菜单引导你完成设置。
 *   **Chat ID (用户 ID)**：输入你的 Telegram 用户 ID。
 *   **Bot Token (机器人令牌)**：来自 BotFather 的 API Token。
 
-### 3. System Settings (系统设置)
+### 3. AI Settings (AI 设置)
+
+通过 LiteLLM 的双级菜单配置 AI 分析。
+*   **Enable/Disable (开关)**：开启或关闭 AI 分析。
+*   **Provider Group → Platform (分组 → 平台)**：先选分组再选具体平台。预设覆盖 OpenAI/OpenRouter/Together/Fireworks，Anthropic/Gemini/Mistral/Groq，DeepSeek/Qwen/Moonshot/Minimax，Perplexity/Cohere，以及 Ollama 与自定义 OpenAI 兼容端点。
+*   **API Key**：仅在所选平台需要时提示输入。
+*   **Model (模型)**：可覆盖菜单显示的默认模型名。
+*   **Base URL**：Ollama、OpenRouter、Together、Fireworks、自定义 OpenAI 兼容端点均可编辑。
+*   **Default Mode & Language (默认模式与语言)**：选择 Raw/Hybrid/Agent 以及输出语言策略。
+
+### 4. System Settings (系统设置)
 
 自定义邮件获取器的行为。
 *   **Polling Interval (轮询间隔)**：检查新邮件的频率 (单位：秒)。(默认值：60s，最小值：10s)

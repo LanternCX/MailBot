@@ -166,12 +166,15 @@ def _build_litellm_params(config: AIConfig) -> dict:
     # Provider-specific model prefix for litellm routing
     model = config.model
     provider = config.provider.lower()
-    if provider == "deepseek" and not model.startswith("deepseek/"):
-        params["model"] = f"deepseek/{model}"
-    elif provider == "ollama" and not model.startswith("ollama/"):
-        params["model"] = f"ollama/{model}"
-    elif provider == "ollama_chat" and not model.startswith("ollama_chat/"):
-        params["model"] = f"ollama_chat/{model}"
+    prefix_map = {
+        "deepseek": "deepseek/",
+        "ollama": "ollama/",
+        "ollama_chat": "ollama_chat/",
+    }
+
+    prefix = prefix_map.get(provider)
+    if prefix and not model.startswith(prefix):
+        params["model"] = f"{prefix}{model}"
 
     return params
 

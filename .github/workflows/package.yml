@@ -38,7 +38,7 @@ jobs:
             tag: macos-arm64
 
           # Linux (Standard x64 Server/Desktop)
-          - runner: ubuntu-latest
+          - runner: ubuntu-22.04
             os: ubuntu
             python: "3.10"
             arch: x64
@@ -46,7 +46,7 @@ jobs:
 
           # Linux (ARM64 for Raspberry Pi / Oracle Cloud)
           # Note: Uses GitHub's new ARM runner
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm
             os: ubuntu
             python: "3.10"
             arch: arm64

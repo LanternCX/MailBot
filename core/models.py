@@ -77,6 +77,41 @@ class TelegramNotifierConfig(BaseModel):
     timeout: int = Field(default=30, description="HTTP timeout in seconds")
 
 
+class ProxyConfig(BaseModel):
+    """Global proxy configuration for both IMAP and HTTP requests."""
+
+    enabled: bool = Field(default=True, description="Whether proxy is enabled")
+    scheme: str = Field(default="socks5", description="Proxy scheme: socks5 | socks4 | http")
+    host: str = Field(..., description="Proxy host")
+    port: int = Field(..., description="Proxy port")
+    username: str | None = Field(default=None, description="Proxy username (optional)")
+    password: SecretStr | None = Field(default=None, description="Proxy password (optional)")
+
+    @field_validator("port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not (1 <= v <= 65535):
+            raise ValueError(f"Port must be between 1-65535, got: {v}")
+        return v
+
+    @field_validator("scheme")
+    @classmethod
+    def validate_scheme(cls, v: str) -> str:
+        allowed = {"socks5", "socks4", "http"}
+        if v not in allowed:
+            raise ValueError(f"Proxy scheme must be one of {allowed}, got: {v}")
+        return v
+
+    def as_url(self) -> str:
+        auth = ""
+        if self.username:
+            auth = self.username
+            if self.password:
+                auth += f":{self.password.get_secret_value()}"
+            auth += "@"
+        return f"{self.scheme}://{auth}{self.host}:{self.port}"
+
+
 class NotifierConfig(BaseModel):
     """Unified notifier configuration."""
     type: str = Field(..., description="Notifier type: telegram / discord / slack ...")
@@ -103,6 +138,7 @@ class AppConfig(BaseModel):
     log_level: str = Field(default="INFO", description="Log level: DEBUG/INFO/WARNING/ERROR")
     accounts: list[AccountConfig] = Field(default_factory=list, description="IMAP accounts")
     notifiers: list[NotifierConfig] = Field(default_factory=list, description="Notifiers list")
+    proxy: ProxyConfig | None = Field(default=None, description="Global proxy for IMAP and HTTP")
 
     @field_validator("log_level")
     @classmethod
@@ -134,6 +170,9 @@ class AppConfig(BaseModel):
             tg = notifier.get("telegram")
             if tg and isinstance(tg.get("bot_token"), SecretStr):
                 tg["bot_token"] = tg["bot_token"].get_secret_value()
+        proxy = data.get("proxy")
+        if proxy and isinstance(proxy.get("password"), SecretStr):
+            proxy["password"] = proxy["password"].get_secret_value()
         config_path.write_text(
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8",

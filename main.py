@@ -55,6 +55,7 @@ def run_headless(config_path: Path) -> None:
     """Headless mode — start service, block until Ctrl+C."""
     from core.manager import ServiceManager
     from core.models import AppConfig
+    from utils.helpers import apply_global_proxy
 
     if not config_path.exists():
         print(f"Error: Config not found — {config_path}")
@@ -67,6 +68,7 @@ def run_headless(config_path: Path) -> None:
         print(f"Error: Invalid config — {exc}")
         sys.exit(1)
 
+    apply_global_proxy(config.proxy)
     setup_logging(level=config.log_level)
 
     manager = ServiceManager(config)
@@ -91,6 +93,15 @@ def run_headless(config_path: Path) -> None:
 def run_interactive(config_path: Path) -> None:
     """Interactive menu mode."""
     from interface.menu import main_menu
+    from core.models import AppConfig
+    from utils.helpers import apply_global_proxy
+
+    # Ensure proxy is applied before network ops (menus/tests)
+    try:
+        cfg = AppConfig.load(config_path)
+    except Exception:
+        cfg = AppConfig()
+    apply_global_proxy(cfg.proxy)
 
     setup_logging(level="INFO")
     main_menu(config_path)

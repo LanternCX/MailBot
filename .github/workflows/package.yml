@@ -106,6 +106,7 @@ jobs:
             "poll_interval": 60,
             "max_retries": 3,
             "log_level": "INFO",
+            "proxy": null,
             "accounts": [],
             "notifiers": []
           }

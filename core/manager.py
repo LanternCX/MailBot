@@ -23,9 +23,11 @@ from core.models import (
     AccountConfig,
     AccountState,
     AccountStatus,
+    AIConfig,
     AppConfig,
     EmailSnapshot,
     NotifierConfig,
+    OperationMode,
     ServiceState,
     TelegramNotifierConfig,
 )
@@ -69,9 +71,13 @@ class ServiceManager:
         self._fetchers: list[EmailFetcher] = []
         self._notifiers: list[BaseNotifier] = []
 
+        # Bot handler (for Telegram commands/callbacks)
+        self._bot_handler = None
+
         # Initialize
         self._init_notifiers()
         self._init_fetchers()
+        self._init_bot()
 
     # ──────────────────────────────────────────────
     #  Properties
@@ -141,6 +147,33 @@ class ServiceManager:
             self._fetchers.append(fetcher)
             logger.info("Fetcher registered: [%s] %s", acc.name, acc.email)
 
+    def _init_bot(self) -> None:
+        """Initialize the Telegram bot handler for commands/callbacks."""
+        from core.bot import TelegramBotHandler
+
+        ai_config = self._config.ai
+
+        # Find the first enabled Telegram notifier
+        tg_notifier: TelegramNotifier | None = None
+        for n in self._notifiers:
+            if isinstance(n, TelegramNotifier):
+                tg_notifier = n
+                break
+
+        if not tg_notifier:
+            logger.debug("No Telegram notifier — bot handler disabled")
+            self._bot_handler = None
+            return
+
+        default_mode = ai_config.default_mode if ai_config.enabled else OperationMode.RAW
+
+        self._bot_handler = TelegramBotHandler(
+            notifier=tg_notifier,
+            ai_config=ai_config,
+            default_mode=default_mode,
+        )
+        logger.info("Bot handler initialized (default_mode=%s)", default_mode.value)
+
     # ──────────────────────────────────────────────
     #  Service lifecycle
     # ──────────────────────────────────────────────
@@ -162,6 +195,11 @@ class ServiceManager:
             daemon=True,
         )
         self._thread.start()
+
+        # Start bot handler for commands/callbacks
+        if self._bot_handler:
+            self._bot_handler.start()
+
         logger.info("MailBot service started")
 
     def stop(self) -> None:
@@ -173,6 +211,10 @@ class ServiceManager:
 
         logger.info("Stopping MailBot service...")
         self._stop_event.set()
+
+        # Stop bot handler
+        if self._bot_handler:
+            self._bot_handler.stop()
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=30)
@@ -191,6 +233,7 @@ class ServiceManager:
         self._config = config
         self._init_notifiers()
         self._init_fetchers()
+        self._init_bot()
         logger.info("Configuration reloaded")
 
         if was_running:
@@ -244,12 +287,37 @@ class ServiceManager:
             self._dispatch_notification(snapshot)
 
     def _dispatch_notification(self, snapshot: EmailSnapshot) -> None:
-        """Send snapshots to all notifiers."""
+        """Send snapshots to all notifiers with mode-aware processing."""
         success_count = 0
+
+        # Determine current mode and run AI if needed
+        current_mode = OperationMode.RAW
+        ai_result = None
+
+        if self._bot_handler:
+            current_mode = self._bot_handler.mode
+
+            # Cache email for potential hybrid callback
+            self._bot_handler.cache_email(snapshot)
+
+            # Agent mode: always run AI
+            if current_mode == OperationMode.AGENT:
+                from core.ai import analyze_email
+                ai_result = analyze_email(
+                    subject=snapshot.subject,
+                    sender=snapshot.sender,
+                    body=snapshot.body_text,
+                    config=self._config.ai,
+                )
 
         for notifier in self._notifiers:
             try:
-                if notifier.send(snapshot):
+                if isinstance(notifier, TelegramNotifier):
+                    ok = notifier.send_with_mode(snapshot, current_mode, ai_result)
+                else:
+                    ok = notifier.send(snapshot)
+
+                if ok:
                     success_count += 1
                 else:
                     logger.warning(

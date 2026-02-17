@@ -42,6 +42,13 @@ class ServiceState(str, Enum):
     STOPPING = "stopping"
 
 
+class OperationMode(str, Enum):
+    """AI operation mode for email processing."""
+    RAW = "raw"
+    HYBRID = "hybrid"
+    AGENT = "agent"
+
+
 # ──────────────────────────────────────────────
 #  Persistent configuration models
 # ──────────────────────────────────────────────
@@ -112,6 +119,22 @@ class ProxyConfig(BaseModel):
         return f"{self.scheme}://{auth}{self.host}:{self.port}"
 
 
+class AIConfig(BaseModel):
+    """AI / LLM configuration for email analysis."""
+    enabled: bool = Field(default=False, description="Whether AI analysis is enabled")
+    provider: str = Field(
+        default="openai",
+        description="LLM provider: openai / deepseek / ollama / custom",
+    )
+    api_key: SecretStr | None = Field(default=None, description="LLM API key")
+    model: str = Field(default="gpt-4o-mini", description="Model name, e.g. gpt-4o-mini")
+    base_url: str | None = Field(default=None, description="Custom API base URL (for Ollama / proxy)")
+    default_mode: OperationMode = Field(
+        default=OperationMode.HYBRID,
+        description="Default operation mode: raw / hybrid / agent",
+    )
+
+
 class NotifierConfig(BaseModel):
     """Unified notifier configuration."""
     type: str = Field(..., description="Notifier type: telegram / discord / slack ...")
@@ -139,6 +162,7 @@ class AppConfig(BaseModel):
     accounts: list[AccountConfig] = Field(default_factory=list, description="IMAP accounts")
     notifiers: list[NotifierConfig] = Field(default_factory=list, description="Notifiers list")
     proxy: ProxyConfig | None = Field(default=None, description="Global proxy for IMAP and HTTP")
+    ai: AIConfig = Field(default_factory=AIConfig, description="AI analysis configuration")
 
     @field_validator("log_level")
     @classmethod
@@ -173,6 +197,9 @@ class AppConfig(BaseModel):
         proxy = data.get("proxy")
         if proxy and isinstance(proxy.get("password"), SecretStr):
             proxy["password"] = proxy["password"].get_secret_value()
+        ai = data.get("ai")
+        if ai and isinstance(ai.get("api_key"), SecretStr):
+            ai["api_key"] = ai["api_key"].get_secret_value()
         config_path.write_text(
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -196,6 +223,20 @@ class EmailSnapshot(BaseModel):
 
     class Config:
         frozen = True  # snapshots should be immutable
+
+
+class AIAnalysisResult(BaseModel):
+    """Structured AI analysis result for an email."""
+    summary: str = Field(default="Unable to generate summary", description="English summary (50-100 words)")
+    category: str = Field(
+        default="notification",
+        description="Category: verification_code/notification/billing/promotion/personal",
+    )
+    priority: int = Field(default=3, ge=1, le=5, description="Priority 1-5 (1=highest)")
+    extracted_code: str | None = Field(
+        default=None,
+        description="Extracted verification code / pickup code / token",
+    )
 
 
 class AccountStatus(BaseModel):

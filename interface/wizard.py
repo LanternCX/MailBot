@@ -14,8 +14,10 @@ from rich.console import Console
 
 from core.models import (
     AccountConfig,
+    AIConfig,
     AppConfig,
     NotifierConfig,
+    OperationMode,
     TelegramNotifierConfig,
 )
 
@@ -216,3 +218,101 @@ def _verify_imap(acc: AccountConfig) -> None:
         console.print(f"[red]Error: Connection failed — {exc}[/red]")
     except Exception as exc:
         console.print(f"[red]Error: {exc}[/red]")
+
+
+# ── AI Configuration ──
+
+AI_PROVIDERS: dict[str, dict[str, str]] = {
+    "OpenAI": {"provider": "openai", "model": "gpt-4o-mini"},
+    "DeepSeek": {"provider": "deepseek", "model": "deepseek-chat"},
+    "Ollama": {"provider": "ollama", "model": "llama3"},
+    "Custom": {"provider": "custom", "model": ""},
+}
+
+
+def ai_wizard(config: AppConfig) -> AIConfig | None:
+    """Interactive wizard to configure AI analysis settings."""
+    console.print("\n[bold cyan]── AI Configuration ──[/bold cyan]")
+
+    existing = config.ai
+
+    # Step 1: Enable AI?
+    enabled = questionary.confirm(
+        "Enable AI analysis?",
+        default=existing.enabled,
+        qmark="▸",
+    ).ask()
+    if enabled is None:
+        return None
+
+    if not enabled:
+        return AIConfig(enabled=False)
+
+    # Step 2: Provider
+    provider_name = questionary.select(
+        "Select AI provider:",
+        choices=list(AI_PROVIDERS.keys()),
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if provider_name is None:
+        return None
+
+    preset = AI_PROVIDERS[provider_name]
+    provider = preset["provider"]
+    default_model = preset["model"]
+
+    # Step 3: API Key (not needed for Ollama)
+    api_key_str: str | None = None
+    if provider != "ollama":
+        existing_key = existing.api_key.get_secret_value() if existing.api_key else ""
+        api_key_str = questionary.password(
+            "API Key:",
+            default=existing_key,
+            qmark="▸",
+        ).ask()
+        if not api_key_str:
+            console.print("[yellow]Warning: No API key provided.[/yellow]")
+
+    # Step 4: Model
+    model = questionary.text(
+        "Model name:",
+        default=existing.model if existing.model != "gpt-4o-mini" else default_model,
+        qmark="▸",
+    ).ask()
+    if not model:
+        model = default_model or "gpt-4o-mini"
+
+    # Step 5: Base URL (for Ollama / custom proxy)
+    base_url: str | None = None
+    if provider in ("ollama", "custom"):
+        default_url = existing.base_url or ("http://localhost:11434" if provider == "ollama" else "")
+        base_url = questionary.text(
+            "API Base URL:",
+            default=default_url,
+            qmark="▸",
+        ).ask() or None
+
+    # Step 6: Default mode
+    mode_choice = questionary.select(
+        "Default operation mode:",
+        choices=[
+            questionary.Choice("Raw (forward only, no AI)", value="raw"),
+            questionary.Choice("Hybrid (on-demand AI)", value="hybrid"),
+            questionary.Choice("Agent (AI on every email)", value="agent"),
+        ],
+        default=existing.default_mode.value,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if mode_choice is None:
+        mode_choice = "hybrid"
+
+    return AIConfig(
+        enabled=True,
+        provider=provider,
+        api_key=SecretStr(api_key_str) if api_key_str else None,
+        model=model,
+        base_url=base_url,
+        default_mode=OperationMode(mode_choice),
+    )

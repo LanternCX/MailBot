@@ -14,3 +14,4 @@ dist/
 coverage/
 .mypy_cache/
 *.sqlite3
+requirements.md

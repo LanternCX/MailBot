@@ -4,7 +4,7 @@
   "log_level": "INFO",
   "accounts": [
     {
-      "name": "Gmail 工作邮箱",
+      "name": "Gmail Work",
       "email": "your-email@gmail.com",
       "password": "your-app-specific-password",
       "imap_host": "imap.gmail.com",
@@ -15,7 +15,7 @@
       "web_url": ""
     },
     {
-      "name": "Outlook 个人邮箱",
+      "name": "Outlook Personal",
       "email": "your-email@outlook.com",
       "password": "your-password",
       "imap_host": "outlook.office365.com",
@@ -37,5 +37,13 @@
         "timeout": 30
       }
     }
-  ]
+  ],
+  "ai": {
+    "enabled": false,
+    "provider": "openai",
+    "api_key": "sk-your-api-key",
+    "model": "gpt-4o-mini",
+    "base_url": null,
+    "default_mode": "hybrid"
+  }
 }

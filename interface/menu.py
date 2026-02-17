@@ -17,7 +17,7 @@ from rich.console import Console
 
 from core.manager import ServiceManager
 from core.models import AppConfig, ProxyConfig
-from interface.wizard import account_wizard, bot_wizard
+from interface.wizard import account_wizard, ai_wizard, bot_wizard
 from utils.helpers import (
     apply_global_proxy,
     show_accounts_table,
@@ -34,6 +34,7 @@ console = Console()
 CHOICE_START = "Start Service"
 CHOICE_CONFIG = "Config Wizard"
 CHOICE_BOT = "Bot Settings"
+CHOICE_AI = "AI Settings"
 CHOICE_TEST = "Test Connection"
 CHOICE_SYSTEM = "System Settings"
 CHOICE_EXIT = "Exit"
@@ -42,6 +43,7 @@ MENU_CHOICES = [
     CHOICE_START,
     CHOICE_CONFIG,
     CHOICE_BOT,
+    CHOICE_AI,
     CHOICE_SYSTEM,
     CHOICE_TEST,
     CHOICE_EXIT,
@@ -72,6 +74,8 @@ def main_menu(config_path: Path) -> None:
             config = _config_wizard(config, config_path)
         elif choice == CHOICE_BOT:
             config = _bot_settings(config, config_path)
+        elif choice == CHOICE_AI:
+            config = _ai_settings(config, config_path)
         elif choice == CHOICE_SYSTEM:
             config = _system_settings(config, config_path)
         elif choice == CHOICE_TEST:
@@ -301,6 +305,27 @@ def _bot_settings(config: AppConfig, config_path: Path) -> AppConfig:
             config.notifiers.clear()
             config.save(config_path)
             console.print("[green]All notifiers removed.[/green]")
+
+    return config
+
+
+def _ai_settings(config: AppConfig, config_path: Path) -> AppConfig:
+    """Configure AI analysis settings."""
+    ai = config.ai
+    status = "[green]Enabled[/green]" if ai.enabled else "[red]Disabled[/red]"
+    console.print(f"[dim]AI Status:[/dim] {status}")
+    if ai.enabled:
+        console.print(
+            f"[dim]  Provider: {ai.provider}  Model: {ai.model}  Mode: {ai.default_mode.value}[/dim]"
+        )
+
+    new_ai = ai_wizard(config)
+    if new_ai:
+        config.ai = new_ai
+        config.save(config_path)
+        console.print("[green]AI settings saved.[/green]")
+    else:
+        console.print("[dim]No changes applied.[/dim]")
 
     return config
 

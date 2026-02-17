@@ -19,6 +19,7 @@ Keep the codebase consistent with open-source Python norms (PEP 8/PEP 257/typing
 - Keep functions short and single-purpose; extract helpers for repeated blocks.
 - Docstrings: concise summary; note side effects or non-obvious args/returns.
 - Comments: English only; reserve for non-trivial logic/rationale.
+- **User-facing text (CLI prompts, bot messages, config defaults, AI prompts) must be English unless explicitly requested otherwise.**
 - Error handling: catch narrow exceptions; log with context; avoid silent failures.
 - Concurrency: guard shared state with locks; use events for stop signals; avoid races.
 - Imports: stdlib → third-party → local; drop unused imports; avoid circulars.

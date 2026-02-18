@@ -149,7 +149,13 @@ MailBot/
 └── interface/              # Interactive CLI layer
     ├── menu.py             # Main menu
     └── wizard.py           # Configuration wizards
-```
+
+## Acknowledgments
+
+Special thanks to:
+- @MicrosoftCopilot
+- @claude
+- @google-gemini
 
 ## 📄 License
 

@@ -25,6 +25,20 @@ An intelligent assistant that understands, summarizes, and processes your emails
 - **Interactive Setup**: CLI wizard for easy account and AI configuration management.
 - **Privacy First**: Supports local models (Ollama) and self-hosted APIs for complete data control.
 
+## 🧠 Supported Models
+
+MailBot supports a wide range of LLM providers via LiteLLM:
+
+| Provider Group | Supported Providers |
+| :--- | :--- |
+| **OpenAI & Compatible** | OpenAI, OpenRouter, Together AI, Fireworks AI |
+| **Frontier Models** | Anthropic (Claude), Google Gemini, Mistral, Groq |
+| **China-Friendly** | DeepSeek, Qwen, Moonshot, MiniMax |
+| **Research / Web** | Perplexity, Cohere |
+| **Local & Custom** | Ollama, Custom OpenAI-Compatible |
+
+For a full list of models supported by LiteLLM, please refer to the [LiteLLM Providers Documentation](https://docs.litellm.ai/docs/providers).
+
 ## 🚀 Quick Start
 
 ### Method 1: Executable (Recommended)

@@ -25,6 +25,20 @@
 - **交互式配置**：通过命令行向导轻松管理账户与 AI 设置。
 - **隐私优先**：支持本地模型 (Ollama) 与自建 API，数据自主掌控。
 
+## 🧠 支持模型列表
+
+MailBot 基于 LiteLLM 提供了广泛的模型支持：
+
+| 模型分组 | 支持的服务商 |
+| :--- | :--- |
+| **OpenAI & Compatible** | OpenAI, OpenRouter, Together AI, Fireworks AI |
+| **Frontier Models** | Anthropic (Claude), Google Gemini, Mistral, Groq |
+| **China-Friendly** | DeepSeek, Qwen (通义千问), Moonshot (Kimi), MiniMax |
+| **Research / Web** | Perplexity, Cohere |
+| **Local & Custom** | Ollama (本地), 自定义 OpenAI 兼容接口 |
+
+完整的支持列表请参考 [LiteLLM Providers 文档](https://docs.litellm.ai/docs/providers)。
+
 ## 🚀 快速开始
 
 ### 方式一：直接运行

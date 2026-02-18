@@ -9,7 +9,7 @@ Responsibilities:
 - Handle /rules command: view/manage persona rules
 - Handle /ai command: reply-based AI analysis
 - Handle /help command
-- Handle callback queries: mode/language switching, AI toggle, settings nav
+- Handle callback queries: language/mode switching, hybrid AI summary, settings nav
 - Manage global operation mode + language state
 - Persist config changes to JSON
 """
@@ -290,7 +290,6 @@ class TelegramBotHandler:
         logger.info("/settings command from chat %s", chat_id)
         self._notifier.send_settings_panel(
             current_mode=self.mode,
-            ai_enabled=self.ai_enabled,
             language=self.language,
             chat_id=chat_id,
         )
@@ -346,6 +345,9 @@ class TelegramBotHandler:
                 [
                     {"text": "➕ Add", "callback_data": "rules_add"},
                     {"text": "🗑 Delete", "callback_data": "rules_delete"},
+                ],
+                [
+                    {"text": "❌ Close", "callback_data": "rules_close"},
                 ],
             ]
         }
@@ -487,14 +489,12 @@ class TelegramBotHandler:
             self._notifier.answer_callback_query(cq_id)
         elif data == "settings_back":
             self._notifier.edit_settings_main(
-                chat_id, message_id, self.mode, self.ai_enabled, self.language,
+                chat_id, message_id, self.mode, self.language,
             )
             self._notifier.answer_callback_query(cq_id)
         elif data == "settings_close":
             self._notifier.delete_message(chat_id, message_id)
             self._notifier.answer_callback_query(cq_id, "Settings closed")
-        elif data == "settings_ai_toggle":
-            self._cb_ai_toggle(cq_id, chat_id, message_id)
 
         # ── Language selection ──
         elif data.startswith("lang_"):
@@ -527,6 +527,9 @@ class TelegramBotHandler:
                 "text": "🗑 Send me the rule number to delete.",
                 "parse_mode": "HTML",
             })
+        elif data == "rules_close":
+            self._notifier.delete_message(chat_id, message_id)
+            self._notifier.answer_callback_query(cq_id, "Rules closed")
 
         else:
             self._notifier.answer_callback_query(cq_id, "Unknown action")
@@ -566,7 +569,7 @@ class TelegramBotHandler:
 
         # Return to main settings menu
         self._notifier.edit_settings_main(
-            chat_id, message_id, self.mode, self.ai_enabled, self.language,
+            chat_id, message_id, self.mode, self.language,
         )
 
     def _cb_mode_switch(
@@ -602,29 +605,7 @@ class TelegramBotHandler:
 
         # Return to main settings menu
         self._notifier.edit_settings_main(
-            chat_id, message_id, self.mode, self.ai_enabled, self.language,
-        )
-
-    def _cb_ai_toggle(
-        self,
-        cq_id: str,
-        chat_id: str,
-        message_id: int,
-    ) -> None:
-        """Toggle AI enabled/disabled."""
-        new_state = not self.ai_enabled
-        self.ai_enabled = new_state
-        self._ai_config.enabled = new_state
-        logger.info("AI toggled: %s", "ON" if new_state else "OFF")
-
-        self._persist_ai_config()
-
-        status = "🟢 AI enabled" if new_state else "🔴 AI disabled"
-        self._notifier.answer_callback_query(cq_id, status)
-
-        # Refresh main menu
-        self._notifier.edit_settings_main(
-            chat_id, message_id, self.mode, self.ai_enabled, self.language,
+            chat_id, message_id, self.mode, self.language,
         )
 
     def _cb_summary(
@@ -675,28 +656,20 @@ class TelegramBotHandler:
         # Translation block
         if result.translation:
             lines.append(f"\n🌐 <b>Translation</b>\n{esc(result.translation)}")
-
-        lines.append("")
-        lines.append("─" * 20)
-        lines.append("📬 <b>Original mail</b>")
-        lines.append(f"📧 Account: {esc(snapshot.account_name)}")
-        lines.append(f"👤 From: {esc(snapshot.sender)}")
-        lines.append(f"📌 Subject: {esc(snapshot.subject)}")
-
-        if snapshot.date:
-            lines.append(f"🕐 Time: {snapshot.date.strftime('%Y-%m-%d %H:%M')}")
-
-        preview = snapshot.body_text[:300]
-        if len(snapshot.body_text) > 300:
-            preview += "…"
-        lines.append(f"\n📝 Preview:\n{esc(preview)}")
-
         if snapshot.web_link:
             lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
 
         text = "\n".join(lines)
 
-        self._notifier.edit_message_text(chat_id, message_id, text, parse_mode="HTML")
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_to_message_id": message_id,
+            },
+        )
 
     # ──────────────────────────────────────────────
     #  Helpers

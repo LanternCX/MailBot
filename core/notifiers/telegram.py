@@ -128,8 +128,8 @@ class TelegramNotifier(BaseNotifier):
             return self.send(snapshot)
 
         # Long content: send preview with AI button
-        preview = body[:200]
-        if len(body) > 200:
+        preview = body[:50]
+        if len(body) > 50:
             preview += "…"
 
         lines = [
@@ -199,7 +199,6 @@ class TelegramNotifier(BaseNotifier):
     def send_settings_panel(
         self,
         current_mode: OperationMode,
-        ai_enabled: bool,
         language: str,
         chat_id: str | None = None,
     ) -> dict | None:
@@ -208,8 +207,8 @@ class TelegramNotifier(BaseNotifier):
 
         Returns the API response dict (contains message_id) or None on failure.
         """
-        text = self._build_settings_text(current_mode, ai_enabled, language)
-        keyboard = self._build_settings_main_keyboard(current_mode, ai_enabled, language)
+        text = self._build_settings_text(current_mode, language)
+        keyboard = self._build_settings_main_keyboard(current_mode, language)
 
         payload: dict[str, Any] = {
             "chat_id": chat_id or self._config.chat_id,
@@ -225,12 +224,11 @@ class TelegramNotifier(BaseNotifier):
         chat_id: str,
         message_id: int,
         current_mode: OperationMode,
-        ai_enabled: bool,
         language: str,
     ) -> bool:
         """Edit an existing message to show the settings main menu."""
-        text = self._build_settings_text(current_mode, ai_enabled, language)
-        keyboard = self._build_settings_main_keyboard(current_mode, ai_enabled, language)
+        text = self._build_settings_text(current_mode, language)
+        keyboard = self._build_settings_main_keyboard(current_mode, language)
 
         payload: dict[str, Any] = {
             "chat_id": chat_id,
@@ -322,50 +320,29 @@ class TelegramNotifier(BaseNotifier):
     @staticmethod
     def _build_settings_text(
         mode: OperationMode,
-        ai_enabled: bool,
         language: str,
     ) -> str:
         mode_label = MODE_LABELS.get(mode, mode.value)
         lang_label = LANGUAGE_LABELS.get(language, language)
-        ai_status = "🟢 On" if ai_enabled else "🔴 Off"
         return (
             "⚙️ <b>MailBot Settings</b>\n\n"
             f"🌐 Language: <b>{lang_label}</b>\n"
             f"📋 Mode: <b>{mode_label}</b>\n"
-            f"🤖 AI: <b>{ai_status}</b>"
+            "Use the CLI or config.json to change AI on/off."
         )
 
     @staticmethod
     def _build_settings_main_keyboard(
         mode: OperationMode,
-        ai_enabled: bool,
         language: str,
     ) -> dict:
-        mode_label = MODE_LABELS.get(mode, mode.value)
-        ai_toggle_text = "🟢 AI: On" if ai_enabled else "🔴 AI: Off"
         return {
             "inline_keyboard": [
                 [{"text": "🌐 Language >", "callback_data": "settings_lang"}],
-                [{"text": f"⚙️ Mode: {mode_label} >", "callback_data": "settings_mode"}],
-                [{"text": ai_toggle_text, "callback_data": "settings_ai_toggle"}],
+                [{"text": f"⚙️ Mode: {MODE_LABELS.get(mode, mode.value)} >", "callback_data": "settings_mode"}],
                 [{"text": "❌ Close", "callback_data": "settings_close"}],
             ]
         }
-
-    # ── Legacy compat: keep send_mode_panel / edit_mode_panel as thin wrappers ──
-
-    def send_mode_panel(self, current_mode: OperationMode, chat_id: str | None = None) -> dict | None:
-        """Backward-compat: redirect to settings panel."""
-        return self.send_settings_panel(current_mode, True, "auto", chat_id)
-
-    def edit_mode_panel(
-        self,
-        chat_id: str,
-        message_id: int,
-        current_mode: OperationMode,
-    ) -> bool:
-        """Backward-compat: redirect to settings main."""
-        return self.edit_settings_main(chat_id, message_id, current_mode, True, "auto")
 
     # ──────────────────────────────────────────────
     #  /ai reply analysis

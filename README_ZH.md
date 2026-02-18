@@ -111,7 +111,7 @@ python main.py
 
 ## 🏗 项目架构
 
-![项目架构](./docs/img/framework.png)
+![项目架构](./docs/img/framework.jpg)
 
 ## 🏗 项目结构
 

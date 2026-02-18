@@ -113,7 +113,7 @@ python main.py
 
 ## 🏗 Project Architecture
 
-![Project Architecture](./docs/img/framework.png)
+![Project Architecture](./docs/img/framework.jpg)
 
 ## 🏗 Project Structure
 

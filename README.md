@@ -151,6 +151,12 @@ MailBot/
     └── wizard.py           # Configuration wizards
 ```
 
+## Acknowledgments
+
+Special thanks to:
+- @MicrosoftCopilot
+- @claude
+
 ## 📄 License
 
 MIT

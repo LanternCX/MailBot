@@ -16,8 +16,11 @@ from __future__ import annotations
 import json
 import logging
 import re
+import socket
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from core.models import AIAnalysisResult, AIConfig
 
@@ -147,6 +150,29 @@ def build_system_prompt(config: AIConfig, rules_block: str | None = None) -> str
 #  Core helpers
 # ──────────────────────────────────────────────
 
+@contextmanager
+def _bypass_socket_proxy() -> Iterator[None]:
+    """Temporarily restore the original (un-patched) socket.
+
+    ``apply_global_proxy`` monkey-patches ``socket.socket`` with PySocks so that
+    IMAP connections are transparently proxied.  However, httpx (used by litellm)
+    already honours ``HTTP(S)_PROXY`` env-vars and sets up its own proxy tunnel.
+    If the socket is *also* patched, httpx ends up double-proxying the connection
+    (socket-level proxy → HTTP-level proxy), which causes an SSL EOF error.
+
+    This context manager swaps the original socket back for the duration of the
+    ``with`` block so that httpx/litellm use only env-var-based proxying.
+    """
+    from utils.helpers import _ORIGINAL_SOCKET
+
+    patched = socket.socket
+    socket.socket = _ORIGINAL_SOCKET
+    try:
+        yield
+    finally:
+        socket.socket = patched
+
+
 def _patch_litellm_cost_map(exc: FileNotFoundError) -> None:
     """Create missing litellm JSON data files so the module can be re-imported.
 
@@ -251,6 +277,7 @@ def analyze_email(
         from utils.logger import adopt_dependency_loggers, get_active_log_level
 
         litellm.drop_params = True  # ignore unsupported params per provider
+        litellm.aiohttp_trust_env = True  # honor HTTP_PROXY / HTTPS_PROXY as per docs
         adopt_dependency_loggers(("LiteLLM",), level=get_active_log_level(), force_handlers=False)
     except ImportError:
         logger.error("litellm not installed — run: pip install litellm")
@@ -281,17 +308,18 @@ def analyze_email(
     params = _build_litellm_params(config)
 
     try:
-        response = litellm.completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_msg},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=800,
-            timeout=30,
-            **params,
-        )
+        with _bypass_socket_proxy():
+            response = litellm.completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=800,
+                timeout=30,
+                **params,
+            )
 
         raw = response.choices[0].message.content  # type: ignore[union-attr]
         if not raw:

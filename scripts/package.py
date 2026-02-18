@@ -4,11 +4,65 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _litellm_data_args() -> list[str]:
+    """Return --add-data args for litellm cost map files if present."""
+    try:
+        import litellm
+    except ImportError:
+        return []
+
+    data_dir = Path(litellm.__file__).parent
+    files = [
+        data_dir / "model_prices_and_context_window_backup.json",
+        data_dir / "model_prices_and_context_window.json",
+    ]
+
+    sep = ";" if os.name == "nt" else ":"
+    args: list[str] = []
+    for src in files:
+        if src.exists():
+            args.extend(["--add-data", f"{src}{sep}litellm/{src.name}"])
+    return args
+
+
+def _litellm_pyinstaller_args() -> list[str]:
+    """Return pyinstaller args to ensure litellm modules and data are bundled."""
+    try:
+        import litellm  # noqa: F401
+    except ImportError:
+        return []
+
+    args: list[str] = [
+        "--hidden-import",
+        "litellm",
+        "--collect-data",
+        "litellm",
+        # tiktoken is used by litellm for token counting; its encoding
+        # registry relies on the tiktoken_ext namespace package which
+        # PyInstaller cannot discover automatically.
+        "--hidden-import",
+        "tiktoken",
+        "--hidden-import",
+        "tiktoken_ext",
+        "--hidden-import",
+        "tiktoken_ext.openai_public",
+        "--collect-data",
+        "tiktoken_ext",
+        # socksio is needed by httpx for SOCKS proxy support;
+        # it is a lazy/optional import that PyInstaller cannot detect.
+        "--hidden-import",
+        "socksio",
+    ]
+    args += _litellm_data_args()
+    return args
 
 
 def main() -> int:
@@ -38,6 +92,8 @@ def main() -> int:
         shutil.rmtree(dist_root, ignore_errors=True)
         shutil.rmtree(build_root, ignore_errors=True)
 
+    hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
+
     pyinstaller_cmd = [
         sys.executable,
         "-m",
@@ -51,8 +107,15 @@ def main() -> int:
         str(build_root),
         "--specpath",
         str(build_root),
-        args.entry,
     ]
+
+    if hooks_dir.is_dir():
+        pyinstaller_cmd += ["--additional-hooks-dir", str(hooks_dir)]
+
+    pyinstaller_cmd.append(args.entry)
+
+    # Include litellm cost map JSON files so packaged binary does not crash when loading pricing metadata.
+    pyinstaller_cmd += _litellm_pyinstaller_args()
 
     print("Running PyInstaller:", "\"" + " ".join(pyinstaller_cmd) + "\"")
     result = subprocess.run(pyinstaller_cmd, check=False)

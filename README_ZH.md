@@ -5,11 +5,9 @@
 
 [中文](README_ZH.md) | [English](README.md)
 
-> 一个简单易用的 IMAP 邮件转发 Telegram 机器人。
->
-> An easy-to-use IMAP-to-Telegram mail forwarder with an interactive CLI wizard.
+> 你的 AI 邮件管理 Agent
 
-无需手动编辑配置文件——运行 `main` 程序并跟随向导操作即可。
+一个能够理解、总结并按照你的规则处理邮件的智能助手。
 
 ---
 
@@ -17,13 +15,15 @@
 
 ![预览](./docs/img/preview.png)
 
-## ✨ 功能特性
+## ✨ 核心特性
 
-- **邮件转发**：转发脚本启动后邮箱列表中收到的新邮件到聊天机器人中。
-- **交互式配置**：通过命令行向导添加账户、设置 Bot，无需直接修改 JSON。
-- **多账户支持**：同时监控多个 IMAP 邮箱和转发到多个 Bot 端（目前仅支持 Telegram）。
-- **HTML 解析**：智能提取邮件正文，去除冗余标签。
-- **Docker 友好**：支持 Headless 模式运行。
+- **智能代理 (Agent)**：基于 LLM 的邮件内容理解、重要性识别与摘要。
+- **极低成本**： 使用提示词极少，Token 成本极低。
+- **多模型支持**：无缝接入 OpenAI, Claude, Gemini, DeepSeek, Ollama 等主流模型。
+- **规则引擎**：在 Telegram 中通过自然语言定义你的邮件处理偏好。
+- **多语言适配**：自动语言检测与翻译，打破阅读障碍。
+- **交互式配置**：通过命令行向导轻松管理账户与 AI 设置。
+- **隐私优先**：支持本地模型 (Ollama) 与自建 API，数据自主掌控。
 
 ## 🚀 快速开始
 
@@ -46,7 +46,7 @@
    # Linux
    chmod +x mailbot-linux-amd64
    ./mailbot-linux-x64
-
+   
    # Windows
    .\mailbot-windows-x64.exe
    ```
@@ -98,6 +98,20 @@ python main.py
 ▸ Test Connection    — 发送测试消息到 Telegram
 ▸ Exit               — 退出
 ```
+
+## 🤖 Telegram 指令
+
+| 指令 | 说明 |
+| :--- | :--- |
+| `/start` | 检查机器人是否在线 |
+| `/settings` | 打开交互式设置面板（切换模式/语言） |
+| `/ai` | (回复某条消息) 手动触发 AI 分析 |
+| `/rules` | 查看或管理 AI 处理规则 (支持自然语言增删) |
+| `/help` | 显示帮助信息 |
+
+## 🏗 项目架构
+
+![项目架构](./docs/img/framework.png)
 
 ## 🏗 项目结构
 

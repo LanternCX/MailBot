@@ -83,7 +83,15 @@ jobs:
         shell: bash
         run: |
           pyinstaller --clean --onefile \
+            --additional-hooks-dir hooks \
             --collect-all rich \
+            --hidden-import litellm \
+            --collect-data litellm \
+            --hidden-import tiktoken \
+            --hidden-import tiktoken_ext \
+            --hidden-import tiktoken_ext.openai_public \
+            --collect-data tiktoken_ext \
+            --hidden-import socksio \
             --name "mailbot-${{ matrix.tag }}" main.py
 
       # Bundle binary and create default config

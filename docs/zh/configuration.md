@@ -8,9 +8,10 @@ MailBot 提供交互式 CLI 菜单引导你完成设置。
 1.  **Start Service (启动服务)**：启动 IMAP 监听。日志将实时显示在控制台中。
 2.  **Config Wizard (配置向导)**：添加或删除邮箱账户。
 3.  **Bot Settings (机器人设置)**：管理你的 Telegram Bot 配置。
-4.  **System Settings (系统设置)**：高级配置 (轮询频率、重试次数、日志级别)。
-5.  **Test Connection (测试连接)**：验证你的 Telegram 设置是否生效。
-6.  **Exit (退出)**：退出程序。
+4.  **AI Settings (AI 设置)**：管理 AI 模型、API Key 和行为规则。
+5.  **System Settings (系统设置)**：高级配置 (轮询频率、重试次数、日志级别)。
+6.  **Test Connection (测试连接)**：验证你的 Telegram 设置是否生效。
+7.  **Exit (退出)**：退出程序。
 
 ---
 
@@ -30,7 +31,29 @@ MailBot 提供交互式 CLI 菜单引导你完成设置。
 *   **Chat ID (用户 ID)**：输入你的 Telegram 用户 ID。
 *   **Bot Token (机器人令牌)**：来自 BotFather 的 API Token。
 
-### 3. System Settings (系统设置)
+### 3. AI Settings (AI 设置)
+
+通过 LiteLLM 的双级菜单配置 AI 分析。
+*   **Enable/Disable (开关)**：开启或关闭 AI 分析。
+*   **Provider Group → Platform (分组 → 平台)**：先选分组再选具体平台。预设覆盖 OpenAI/OpenRouter/Together/Fireworks，Anthropic/Gemini/Mistral/Groq，DeepSeek/Qwen/Moonshot/Minimax，Perplexity/Cohere，以及 Ollama 与自定义 OpenAI 兼容端点。
+*   **API Key**：仅在所选平台需要时提示输入。
+*   **Model (模型)**：可覆盖菜单显示的默认模型名。
+*   **Base URL**：Ollama、OpenRouter、Together、Fireworks、自定义 OpenAI 兼容端点均可编辑。
+*   **Default Mode & Language (默认模式与语言)**：选择 Raw/Hybrid/Agent 以及输出语言策略。
+
+### 4. Rules (规则系统)
+
+MailBot 支持通过 Telegram 动态管理 AI 的行为规则，无需手动编辑文件。
+*   在 Telegram 中发送 `/rules` 可以查看当前生效的规则。
+*   跟随 Bot 的指引，通过自然语言对话来添加或删除规则。
+*   这些规则将保存到本地的 `rules.md` 中，并在 AI 处理邮件时生效。
+
+例如：
+> "添加规则：忽略所有来自 no-reply@example.com 的邮件"
+
+> "添加规则：遇到包含 '验证码' 的邮件，请提取验证码并加粗显示"
+
+### 5. System Settings (系统设置)
 
 自定义邮件获取器的行为。
 *   **Polling Interval (轮询间隔)**：检查新邮件的频率 (单位：秒)。(默认值：60s，最小值：10s)

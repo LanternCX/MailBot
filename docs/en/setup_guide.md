@@ -49,3 +49,35 @@ With the proxy enabled MailBot automatically sets the `http(s)_proxy` environmen
 For other providers (Outlook, Yahoo, iCloud, etc.), ensure that:
 1.  **IMAP Access** is enabled in your account settings.
 2.  You use an **App Password** if 2FA is enabled (highly recommended).
+
+---
+
+## Local PyInstaller Build & Testing
+
+You can build a single-file executable locally to verify packaging before pushing to GitHub Actions. This catches issues like missing hidden imports or data files early.
+
+### Prerequisites
+
+```bash
+# Make sure you are in the project root with the venv activated
+pip install pyinstaller
+pip install -r requirements.txt
+```
+
+### Build the Full Binary
+
+```bash
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --collect-all rich \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name MailBot main.py
+```
+
+The executable will be at `dist/MailBot`. Run it:
+
+```bash
+./dist/MailBot --help
+./dist/MailBot --headless -c config.json
+```

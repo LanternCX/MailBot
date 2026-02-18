@@ -43,8 +43,8 @@ class BaseNotifier(ABC):
         if snapshot.date:
             lines.append(f"🕐 Time: {snapshot.date.strftime('%Y-%m-%d %H:%M')}")
         if snapshot.body_text:
-            preview = snapshot.body_text[:500]
-            if len(snapshot.body_text) > 500:
+            preview = snapshot.body_text[:50]
+            if len(snapshot.body_text) > 50:
                 preview += "..."
             lines.append(f"")
             lines.append(f"📝 Preview:\n{preview}")

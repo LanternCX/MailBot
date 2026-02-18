@@ -14,8 +14,10 @@ from rich.console import Console
 
 from core.models import (
     AccountConfig,
+    AIConfig,
     AppConfig,
     NotifierConfig,
+    OperationMode,
     TelegramNotifierConfig,
 )
 
@@ -216,3 +218,180 @@ def _verify_imap(acc: AccountConfig) -> None:
         console.print(f"[red]Error: Connection failed — {exc}[/red]")
     except Exception as exc:
         console.print(f"[red]Error: {exc}[/red]")
+
+
+# ── AI Configuration ──
+
+ProviderOption = dict[str, object]
+
+AI_PROVIDER_GROUPS: dict[str, list[ProviderOption]] = {
+    "OpenAI & Compatible": [
+        {"name": "OpenAI", "provider": "openai", "model": "gpt-4o-mini", "requires_api_key": True},
+        {"name": "OpenRouter", "provider": "openrouter", "model": "openrouter/auto", "base_url": "https://openrouter.ai/api/v1"},
+        {"name": "Together AI", "provider": "together_ai", "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "base_url": "https://api.together.xyz/v1"},
+        {"name": "Fireworks AI", "provider": "fireworks_ai", "model": "accounts/fireworks/models/llama-v3p1-70b-instruct", "base_url": "https://api.fireworks.ai/inference/v1"},
+    ],
+    "Frontier Models": [
+        {"name": "Anthropic", "provider": "anthropic", "model": "claude-3-5-sonnet-latest", "requires_api_key": True},
+        {"name": "Google Gemini", "provider": "gemini", "model": "gemini-1.5-flash", "requires_api_key": True},
+        {"name": "Mistral", "provider": "mistral", "model": "mistral-large-latest", "requires_api_key": True},
+        {"name": "Groq", "provider": "groq", "model": "llama-3.1-70b-versatile", "requires_api_key": True},
+    ],
+    "China-Friendly": [
+        {"name": "DeepSeek", "provider": "deepseek", "model": "deepseek-chat", "requires_api_key": True},
+        {"name": "Qwen (Ali Tongyi)", "provider": "qwen", "model": "qwen2-72b-instruct", "requires_api_key": True},
+        {"name": "Moonshot", "provider": "moonshot", "model": "moonshot-v1-32k", "requires_api_key": True},
+        {"name": "MiniMax", "provider": "minimax", "model": "abab6.5s-chat", "requires_api_key": True},
+    ],
+    "Research / Web": [
+        {"name": "Perplexity", "provider": "perplexity", "model": "pplx-70b-online", "requires_api_key": True},
+        {"name": "Cohere", "provider": "cohere", "model": "command-r-plus", "requires_api_key": True},
+    ],
+    "Local & Custom": [
+        {"name": "Ollama (local)", "provider": "ollama", "model": "llama3", "requires_api_key": False, "base_url": "http://localhost:11434", "allow_base_url": True},
+        {"name": "OpenAI-Compatible (custom)", "provider": "custom", "model": "gpt-4o-mini", "requires_api_key": True, "allow_base_url": True},
+    ],
+}
+
+
+def _find_provider_option(provider: str) -> tuple[str | None, ProviderOption | None]:
+    """Locate the provider option by provider id to pre-select defaults."""
+    for group_name, options in AI_PROVIDER_GROUPS.items():
+        for opt in options:
+            if opt.get("provider") == provider:
+                return group_name, opt
+    return None, None
+
+
+def ai_wizard(config: AppConfig) -> AIConfig | None:
+    """Interactive wizard to configure AI analysis settings."""
+    console.print("\n[bold cyan]── AI Configuration ──[/bold cyan]")
+
+    existing = config.ai
+
+    # Step 1: Enable AI?
+    enabled = questionary.confirm(
+        "Enable AI analysis?",
+        default=existing.enabled,
+        qmark="▸",
+    ).ask()
+    if enabled is None:
+        return None
+
+    if not enabled:
+        return AIConfig(enabled=False)
+
+    # Step 2: Provider group → provider
+    existing_group, existing_opt = _find_provider_option(existing.provider)
+    group_names = list(AI_PROVIDER_GROUPS.keys())
+    provider_group = questionary.select(
+        "Select provider group:",
+        choices=group_names,
+        default=existing_group or group_names[0],
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if provider_group is None:
+        return None
+
+    group_options = AI_PROVIDER_GROUPS[provider_group]
+    default_provider_id = str(
+        existing_opt.get("provider") if existing_opt and existing_group == provider_group else group_options[0]["provider"]
+    )
+    provider_id = questionary.select(
+        "Select AI platform:",
+        choices=[
+            questionary.Choice(
+                title=f"{opt['name']} ({opt['model']})",
+                value=str(opt["provider"]),
+            )
+            for opt in group_options
+        ],
+        default=default_provider_id,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if provider_id is None:
+        return None
+
+    preset: ProviderOption = next(opt for opt in group_options if opt["provider"] == provider_id)
+    provider = str(preset["provider"])
+    default_model = str(preset.get("model", ""))
+    requires_api_key = bool(preset.get("requires_api_key", True))
+    preset_base_url = str(preset.get("base_url", "")) or None
+    allow_base_url = bool(preset.get("allow_base_url", False) or preset_base_url)
+
+    # Step 3: API Key (respect provider requirements)
+    api_key_str: str | None = None
+    if requires_api_key:
+        existing_key = existing.api_key.get_secret_value() if existing.api_key and existing.provider == provider else ""
+        api_key_str = questionary.password(
+            "API Key:",
+            default=existing_key,
+            qmark="▸",
+        ).ask()
+        if not api_key_str:
+            console.print("[yellow]Warning: No API key provided.[/yellow]")
+
+    # Step 4: Model
+    model_default = existing.model if existing.provider == provider and existing.model else default_model
+    model = questionary.text(
+        "Model name:",
+        default=model_default or "gpt-4o-mini",
+        qmark="▸",
+    ).ask()
+    if not model:
+        model = default_model or "gpt-4o-mini"
+
+    # Step 5: Base URL (for local/custom/proxy-capable endpoints)
+    base_url: str | None = None
+    if allow_base_url:
+        default_url = existing.base_url if existing.provider == provider else preset_base_url
+        base_url = questionary.text(
+            "API Base URL:",
+            default=default_url or "",
+            qmark="▸",
+        ).ask() or preset_base_url
+    else:
+        base_url = preset_base_url
+
+    # Step 6: Default mode
+    mode_choice = questionary.select(
+        "Default operation mode:",
+        choices=[
+            questionary.Choice("Raw (forward only, no AI)", value="raw"),
+            questionary.Choice("Hybrid (on-demand AI)", value="hybrid"),
+            questionary.Choice("Agent (AI on every email)", value="agent"),
+        ],
+        default=existing.default_mode.value,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if mode_choice is None:
+        mode_choice = "hybrid"
+
+    # Step 7: Output language
+    lang_choice = questionary.select(
+        "AI output language:",
+        choices=[
+            questionary.Choice("Auto-detect (match email language)", value="auto"),
+            questionary.Choice("Chinese (中文)", value="zh"),
+            questionary.Choice("English", value="en"),
+            questionary.Choice("Japanese (日本語)", value="ja"),
+        ],
+        default=existing.language,
+        qmark="▸",
+        pointer="›",
+    ).ask()
+    if lang_choice is None:
+        lang_choice = "auto"
+
+    return AIConfig(
+        enabled=True,
+        provider=provider,
+        api_key=SecretStr(api_key_str) if api_key_str else None,
+        model=model,
+        base_url=base_url,
+        default_mode=OperationMode(mode_choice),
+        language=lang_choice,
+    )

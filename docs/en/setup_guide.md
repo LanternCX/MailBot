@@ -81,39 +81,3 @@ The executable will be at `dist/MailBot`. Run it:
 ./dist/MailBot --help
 ./dist/MailBot --headless -c config.json
 ```
-
-### Quick Smoke Test (litellm only)
-
-A dedicated smoke-test script verifies that litellm imports and loads its cost-map data correctly inside a PyInstaller bundle:
-
-```bash
-# Build the smoke-test binary
-.venv/bin/python -m PyInstaller --clean --onefile \
-    --additional-hooks-dir hooks \
-    --hidden-import litellm \
-    --collect-data litellm \
-    --name smoketest scripts/smoketest_litellm.py
-
-# Run it — should print "OK"
-./dist/smoketest
-```
-
-Expected output:
-
-```
-frozen=True  _MEIPASS=/var/folders/.../...
-OK — litellm <version> imported successfully
-model_cost type=dict  entries=NNNN
-```
-
-If you see `FAIL — FileNotFoundError` or `FAIL — ImportError`, the packaging flags or `hooks/hook-litellm.py` need attention.
-
-### Or Use the Package Script
-
-```bash
-.venv/bin/python scripts/package.py --clean --entry main.py --variant macos-arm64
-```
-
-The resulting zip will be at `dist/macos-arm64/`.
-
-> **Tip:** Clean up test artifacts with `rm -rf dist/ build/` when done.

@@ -5,22 +5,25 @@
 
 [中文](README_ZH.md) | [English](README.md)
 
-> An easy-to-use IMAP-to-Telegram mail forwarder with an interactive CLI wizard.
+> Your AI Mail Management Agent
 
-No YAML editing required — just run the executable or `main.py` and follow the menu.
+An intelligent assistant that understands, summarizes, and processes your emails according to your rules.
 
 ---
+
 ## 🎬 Preview
 
 ![Preview](./docs/img/preview.png)
 
 ## ✨ Features
 
-- **Mail Forwarding**: Forwards new emails that arrive after the script starts into your bot chat.
-- **Interactive Setup**: Add accounts and configure your bot via a clear CLI wizard.
-- **Multi-Account**: Monitor multiple IMAP accounts and relay to multiple bot recipients (currently Telegram only).
-- **Smart Parsing**: Extracts clean text from HTML emails.
-- **Docker Friendly**: Supports headless mode for server deployments.
+- **AI Agent**: LLM-based email content understanding, importance detection, and summarization.
+- **Ultra-low Cost**: Minimal prompt usage ensures extremely low token costs.
+- **Multi-Provider**: Seamless integration with OpenAI, Claude, Gemini, DeepSeek, Ollama, etc.
+- **Rule Engine**: Define your email processing preferences via Telegram using natural language.
+- **Multi-Language Support**: Automatic language detection and translation to break reading barriers.
+- **Interactive Setup**: CLI wizard for easy account and AI configuration management.
+- **Privacy First**: Supports local models (Ollama) and self-hosted APIs for complete data control.
 
 ## 🚀 Quick Start
 
@@ -57,7 +60,7 @@ No YAML editing required — just run the executable or `main.py` and follow the
    ./mailbot-macos-arm64
    ```
 
-3. **Configure**  
+3. **Configuration Wizard**  
    Follow the interactive wizard to add accounts and set up the bot.
    ```bash
    # Optional: Load a specific config file
@@ -82,7 +85,7 @@ python main.py
 - **[Configuration](docs/en/configuration.md)**  
   Detailed explanation of menu options, system settings (polling, retries), and headless mode.
 
-- **Contribute**  
+- **Welcome to Contribute**  
   Send a PR or open an issue with improvements, configuration samples, or bug reports—every contribution helps MailBot better support diverse scenarios.
 
 ---
@@ -97,6 +100,20 @@ python main.py
 ▸ Test Connection    — Send a test message to Telegram to verify setup
 ▸ Exit               — Quit application
 ```
+
+## 🤖 Telegram Commands
+
+| Command | Description |
+| :--- | :--- |
+| `/start` | Check if the bot is alive |
+| `/settings` | Open interactive settings panel (Mode/Language) |
+| `/ai` | (Reply to a message) Manually trigger AI analysis |
+| `/rules` | View or manage AI directives (Natural language add/remove) |
+| `/help` | Show help message |
+
+## 🏗 Project Architecture
+
+![Project Architecture](./docs/img/framework.png)
 
 ## 🏗 Project Structure
 

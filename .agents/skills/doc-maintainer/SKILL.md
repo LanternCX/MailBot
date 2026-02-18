@@ -14,7 +14,7 @@ Ensure user-facing docs reflect current behavior, config schema, CLI flows, and 
 
 # Sources of Truth
 - Root READMEs: [README.md](../../../README.md) and [README_ZH.md](../../../README_ZH.md).
-- Guides: [docs/en](../../../docs/en) and [docs/zh](../../../docs/zh) for setup/configuration.
+- Guides: [docs/en](../../../docs/en), [docs/zh](../../../docs/zh) for setup/configuration, and [docs/dev](../../../docs/dev) for development.
 - Screens/preview assets: [docs/img](../../../docs/img).
 
 # Update Process

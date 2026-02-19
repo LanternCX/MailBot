@@ -145,10 +145,17 @@ MailBot/
 │   ├── manager.py          # Service orchestration
 │   ├── fetcher.py          # IMAP fetching & retry logic
 │   ├── parser.py           # HTML body parsing
+│   ├── ai.py               # AI analysis & rule management
+│   ├── bot.py              # Telegram bot handler
+│   ├── rules.py            # Rule engine
 │   └── notifiers/          # Notification adapters (Telegram)
-└── interface/              # Interactive CLI layer
-    ├── menu.py             # Main menu
-    └── wizard.py           # Configuration wizards
+├── interface/              # Interactive CLI layer
+│   ├── menu.py             # Main menu
+│   └── wizard.py           # Configuration wizards
+├── test/                   # Test files
+├── scripts/                # Utility scripts
+├── hooks/                  # Git hooks & build scripts
+└── logs/                   # Application logs (auto-generated)
 ```
 
 ## Acknowledgments

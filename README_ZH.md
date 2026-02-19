@@ -59,10 +59,10 @@ MailBot 基于 LiteLLM 提供了广泛的模型支持：
    ```bash
    # Linux
    chmod +x mailbot-linux-amd64
-   ./mailbot-linux-x64
+   ./mailbot-linux-amd64
    
    # Windows
-   .\mailbot-windows-x64.exe
+   .\mailbot-windows-amd64.exe
    ```
 
    **macOS (需要清除 Gatekeeper 属性):**
@@ -143,10 +143,17 @@ MailBot/
 │   ├── manager.py          # 服务管理
 │   ├── fetcher.py          # IMAP 抓取与重试机制
 │   ├── parser.py           # 邮件体 HTML 解析
+│   ├── ai.py               # AI 分析与规则管理
+│   ├── bot.py              # Telegram 机器人处理
+│   ├── rules.py            # 规则引擎
 │   └── notifiers/          # 通知适配器（Telegram）
-└── interface/              # UI 交互层
-    ├── menu.py             # 主菜单（questionary）
-    └── wizard.py           # 向导组件
+├── interface/              # UI 交互层
+│   ├── menu.py             # 主菜单（questionary）
+│   └── wizard.py           # 向导组件
+├── test/                   # 测试文件
+├── scripts/                # 实用脚本
+├── hooks/                  # Git hooks & 构建脚本
+└── logs/                   # 应用日志（自动生成）
 ```
 
 ## 📄 License

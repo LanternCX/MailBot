@@ -36,13 +36,27 @@ You need a Telegram Bot Token to send messages and your User ID (Chat ID) to rec
 
 ## Proxy & Network
 
-If your IMAP provider or Telegram endpoint must be reached via a SOCKS/HTTP proxy, add a `proxy` block to your configuration or enable it through the menu’s system settings. It supports:
+If your IMAP provider or Telegram endpoint must be reached via a SOCKS/HTTP proxy, add a `proxy` block to your configuration or enable it through the menu's system settings. It supports:
 
 * `scheme`: `socks5`, `socks4`, or `http`
 * `host`/`port`: address of the proxy
 * `username` / `password`: optional credentials
 
-With the proxy enabled MailBot automatically sets the `http(s)_proxy` environment variables and routes IMAP sockets through the proxy so all network traffic (IMAP fetching + Telegram API) obeys it. Use the CLI wizard’s system settings if you prefer an interactive form.
+**Configuration Example** (add to `config.json`):
+
+```json
+{
+  "proxy": {
+    "scheme": "socks5",
+    "host": "127.0.0.1",
+    "port": 1080,
+    "username": "user",
+    "password": "pass"
+  }
+}
+```
+
+With the proxy enabled MailBot automatically sets the `http(s)_proxy` environment variables and routes IMAP sockets through the proxy so all network traffic (IMAP fetching + Telegram API) obeys it. Use the CLI wizard's system settings if you prefer an interactive form.
 
 ## Other Email Providers
 

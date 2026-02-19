@@ -42,6 +42,20 @@ MailBot 默认在当前工作目录查找 `config.json`；如果希望指定其�
 * `host`/`port` (主机/端口)：代理地址/端口
 * `username` / `password` (用户名/密码)：可选的认证信息
 
+**配置示例** (添加到 `config.json`)：
+
+```json
+{
+  "proxy": {
+    "scheme": "socks5",
+    "host": "127.0.0.1",
+    "port": 1080,
+    "username": "user",
+    "password": "pass"
+  }
+}
+```
+
 启用代理后，MailBot 会自动设置 `http(s)_proxy` 环境变量，并通过代理路由 IMAP 套接字，因此所有网络流量 (IMAP 获取 + Telegram API) 都会遵循该配置。如果你更喜欢交互式操作，请使用 CLI 向导的系统设置。
 
 ## 其他邮箱服务商
@@ -50,6 +64,37 @@ MailBot 默认在当前工作目录查找 `config.json`；如果希望指定其�
 1.  在账号设置中开启了 **IMAP 访问**。
 2.  如果开启了两步验证 (强烈建议)，请使用 **应用专用密码**。
 
+---
+
+## 本地 PyInstaller 打包与测试
+
+在推送到 GitHub Actions 之前，可以在本地构建单文件可执行程序来验证打包是否正确，尽早发现隐藏依赖或数据文件缺失等问题。
+
+### 前置条件
+
+```bash
+# 确保在项目根目录，且已激活 venv
+pip install pyinstaller
+pip install -r requirements.txt
+```
+
+### 构建完整二进制
+
+```bash
+.venv/bin/python -m PyInstaller --clean --onefile \
+    --additional-hooks-dir hooks \
+    --collect-all rich \
+    --hidden-import litellm \
+    --collect-data litellm \
+    --name MailBot main.py
+```
+
+可执行文件位于 `dist/MailBot`，运行：
+
+```bash
+./dist/MailBot --help
+./dist/MailBot --headless -c config.json
+```
 
 ---
 

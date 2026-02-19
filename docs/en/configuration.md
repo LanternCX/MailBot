@@ -8,9 +8,10 @@ MailBot provides an interactive CLI menu to guide you through setup.
 1.  **Start Service**: Launches the IMAP listener. Logs will be displayed live in the console.
 2.  **Config Wizard**: Add or remove email accounts.
 3.  **Bot Settings**: Manage your Telegram Bot configuration.
-4.  **System Settings**: Advanced configuration (polling, retries, logs).
-5.  **Test Connection**: Verify your Telegram setup.
-6.  **Exit**: Quit the application.
+4.  **AI Settings**: Configure AI analysis model, API provider, and behavior rules.
+5.  **System Settings**: Advanced configuration (polling, retries, logs).
+6.  **Test Connection**: Verify your Telegram setup.
+7.  **Exit**: Quit the application.
 
 ---
 
@@ -39,7 +40,12 @@ Configure AI analysis through LiteLLM with a two-level menu.
 *   **API Key**: Prompted only when required by the selected platform.
 *   **Model**: Override the default model name shown in the menu.
 *   **Base URL**: Editable for Ollama, OpenRouter, Together, Fireworks, and custom OpenAI-compatible endpoints.
-*   **Default Mode & Language**: Choose Raw/Hybrid/Agent and the output language behavior.
+*   **Default Mode & Language**: Choose the AI analysis mode:
+    - **Raw**: Returns unfiltered AI analysis of email content
+    - **Hybrid**: Combines AI analysis with email metadata (sender, subject, urgency flags)
+    - **Agent**: Executes rules from `/rules` to perform actions based on email properties
+    
+    Also select the output language (auto-detect, or override to a specific language).
 
 ### 4. Rules System
 
@@ -47,17 +53,27 @@ You can manage AI behavior rules dynamically via Telegram, without editing files
 *   Send `/rules` in Telegram to view active rules.
 *   Follow the bot's prompts to add or remove rules using natural language.
 *   These rules are persisted to `rules.md` and injected into the AI prompt.
+*   **Rule Execution**: Rules are evaluated in the order they appear in `rules.md`. If multiple rules match the same email, all applicable rules are executed sequentially.
+*   **Rule Priority**: More specific rules (e.g., matching specific sender + keyword) should be placed before broader rules to avoid conflicts.
 
 Examples:
 > "Add rule: Ignore all emails from no-reply@example.com"
 > "Add rule: If the email contains a verification code, extract and bold it"
+> "Add rule: Flag emails about project deadlines with ⚠️"
 
 ### 5. System Settings
 
 Customize the behavior of the mail fetcher.
 *   **Polling Interval**: How often (in seconds) to check for new emails. (Default: 60s, Min: 10s)
-*   **Max Retries**: Number of retry attempts on network failure before giving up on a fetch cycle. (Default: 3)
-*   **Log Level**: Verbosity of the console output (DEBUG, INFO, WARNING, ERROR). Set to DEBUG for troubleshooting connection issues.
+    - **Recommendations**:
+      - **10-30s**: For critical accounts where immediate notification is important (e.g., security alerts, urgent work emails)
+      - **60s**: Balanced setting for most users. Good for normal inbox monitoring.
+      - **300s+ (5+ min)**: For low-volume accounts or when you prefer less frequent checks to reduce API usage.
+*   **Max Retries**: Number of retry attempts on network failure before giving up on a fetch cycle. (Default: 3, Recommended: 2-5)
+    - Higher values increase resilience on unreliable networks but may delay error detection.
+*   **Log Level**: Verbosity of the console output (DEBUG, INFO, WARNING, ERROR). 
+    - Set to **DEBUG** for troubleshooting connection issues or API errors.
+    - Use **INFO** for normal operation (recommended for production).
 
 ---
 

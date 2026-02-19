@@ -58,11 +58,11 @@ MailBot 基于 LiteLLM 提供了广泛的模型支持：
    **Linux / Windows (PowerShell):**
    ```bash
    # Linux
-   chmod +x mailbot-linux-amd64
-   ./mailbot-linux-amd64
+   chmod +x mailbot-linux-x64
+   ./mailbot-linux-x64
    
    # Windows
-   .\mailbot-windows-amd64.exe
+   .\mailbot-windows-x64.exe
    ```
 
    **macOS (需要清除 Gatekeeper 属性):**

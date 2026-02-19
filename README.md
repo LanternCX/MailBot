@@ -58,11 +58,11 @@ For a full list of models supported by LiteLLM, please refer to the [LiteLLM Pro
    **Linux / Windows (PowerShell):**
    ```bash
    # Linux
-   chmod +x mailbot-linux-amd64
-   ./mailbot-linux-amd64
+   chmod +x mailbot-linux-x64
+   ./mailbot-linux-x64
 
    # Windows
-   .\mailbot-windows-amd64.exe
+   .\mailbot-windows-x64.exe
    ```
 
    **macOS (Requires Gatekeeper clearance):**

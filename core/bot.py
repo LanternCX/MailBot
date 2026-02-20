@@ -677,6 +677,9 @@ class TelegramBotHandler:
             },
         )
 
+        # Delete the original message with the AI Summary button
+        self._notifier.delete_message(chat_id, message_id)
+
     # ──────────────────────────────────────────────
     #  Helpers
     # ──────────────────────────────────────────────

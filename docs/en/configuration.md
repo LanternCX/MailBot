@@ -40,10 +40,18 @@ Configure AI analysis through LiteLLM with a two-level menu.
 *   **API Key**: Prompted only when required by the selected platform.
 *   **Model**: Override the default model name shown in the menu.
 *   **Base URL**: Editable for Ollama, OpenRouter, Together, Fireworks, and custom OpenAI-compatible endpoints.
-*   **Default Mode & Language**: Choose the AI analysis mode:
-    - **Raw**: Returns unfiltered AI analysis of email content
-    - **Hybrid**: Combines AI analysis with email metadata (sender, subject, urgency flags)
-    - **Agent**: Executes rules from `/rules` to perform actions based on email properties
+*   **Default Mode & Language**: Choose the email processing mode:
+    - **Raw**: Simple forwarding without AI analysis (zero token cost)
+    - **Hybrid**: Email preview with optional AI analysis (**Recommended for cost-conscious users**)
+      - Email preview + three buttons: Summary, Original, Translate
+      - Summary button: On-demand AI analysis (costs tokens only when clicked)
+      - Original button: Show full email content (no cost, uses cached email)
+      - Translate button: Appears only if email language differs from target (costs tokens when clicked)
+      - **Savings**: 80-90% token savings vs Agent mode for typical users
+    - **Agent**: Automatic AI summary on every email (costs tokens upfront)
+      - Automatic AI summary for every email
+      - Original button: Show full email (no cost)
+      - Translate button: Manual translation (costs tokens when clicked)
     
     Also select the output language (auto-detect, or override to a specific language).
 

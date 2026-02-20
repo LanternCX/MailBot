@@ -29,6 +29,7 @@ Keep the codebase consistent with open-source Python norms (PEP 8/PEP 257/typing
 
 # Code Review Checklist
 - Interfaces: new notifiers/fetchers follow factories and respect `enabled` flags.
+- Callbacks: handler methods follow `_cb_<action>(cq_id, data, chat_id, message_id)` signature; use descriptive callback data prefixes (e.g., `summ_`, `trans_`, `orig_`); cache email snapshots in `_email_snapshot_cache` for zero-token retrieval.
 - Logging: lifecycle and error paths covered; no sensitive data; verbosity appropriate.
 - Retries/timeouts: network calls bounded; reuse global settings where possible.
 - Resource safety: threads/events shut down cleanly; connections/clients closed.

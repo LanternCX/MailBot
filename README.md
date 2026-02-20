@@ -17,13 +17,19 @@ An intelligent assistant that understands, summarizes, and processes your emails
 
 ## ✨ Features
 
+- **Three Processing Modes**:
+  - **Raw**: Simple email forwarding without AI analysis (zero token cost)
+  - **Hybrid**: Email preview with optional AI (user controls token usage) — **Recommended for cost-conscious users**
+  - **Agent**: Automatic AI summary with manual translation/original options
+
 - **AI Agent**: LLM-based email content understanding, importance detection, and summarization.
-- **Ultra-low Cost**: Minimal prompt usage ensures extremely low token costs.
+- **Ultra-low Cost**: Minimal prompt usage ensures extremely low token costs. Hybrid mode can save 80-90% tokens.
 - **Multi-Provider**: Seamless integration with OpenAI, Claude, Gemini, DeepSeek, Ollama, etc.
 - **Rule Engine**: Define your email processing preferences via Telegram using natural language.
-- **Multi-Language Support**: Automatic language detection and translation to break reading barriers.
+- **Multi-Language Support**: Automatic language detection and intelligent translation when needed.
 - **Interactive Setup**: CLI wizard for easy account and AI configuration management.
 - **Privacy First**: Supports local models (Ollama) and self-hosted APIs for complete data control.
+- **Dynamic UI**: Smart button display based on email content and language detection.
 
 ## 🧠 Supported Models
 
@@ -124,6 +130,31 @@ python main.py
 | `/ai` | (Reply to a message) Manually trigger AI analysis |
 | `/rules` | View or manage AI directives (Natural language add/remove) |
 | `/help` | Show help message |
+
+## 📊 Operation Modes
+
+### Raw Mode (Simple Forwarding)
+- **Cost**: Zero tokens — no AI analysis
+- **Use case**: Quick email notifications without content analysis
+- **Action**: Direct email forwarding to Telegram
+
+### Hybrid Mode (Smart Preview) — **Recommended**
+- **Cost**: Zero tokens upfront; user controls additional costs via button clicks
+- **Features**:
+  - Email preview + three buttons: **Summary**, **Original**, **Translate**
+  - Summary button: On-demand AI analysis (costs tokens)
+  - Original button: Show full email content (no cost, uses cache)
+  - Translate button: Appears only if email language differs from target (costs tokens when clicked)
+- **Savings**: 80-90% token savings vs Agent mode if you don't use AI features
+- **Use case**: Balance between convenience and cost control
+
+### Agent Mode (Automatic AI)
+- **Cost**: Upfront token cost for automatic AI summary
+- **Features**:
+  - Automatic AI summary on every email
+  - Original button: Show full email (no cost)
+  - Translate button: Manual translation (costs tokens when clicked)
+- **Use case**: Maximum convenience; you want automatic summaries for all emails
 
 ## 🏗 Project Architecture
 

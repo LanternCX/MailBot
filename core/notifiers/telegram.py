@@ -94,12 +94,12 @@ class TelegramNotifier(BaseNotifier):
 
         Mode A (Raw):    plain forward
         Mode B (Hybrid): short preview + AI button, or direct forward
-        Mode C (Agent):  structured AI card
+        Mode C (Agent):  original email only (summary/translation handled separately)
         
         Args:
             snapshot: Email snapshot to send
             mode: Operation mode
-            ai_result: AI analysis result (used in Hybrid and Agent modes)
+            ai_result: AI analysis result (used in Hybrid mode)
             target_language: User's target language setting (used in Hybrid mode)
         """
         if mode == OperationMode.RAW:
@@ -110,9 +110,7 @@ class TelegramNotifier(BaseNotifier):
             return self._send_hybrid(snapshot, source_lang, target_language)
 
         elif mode == OperationMode.AGENT:
-            if ai_result:
-                return self._send_agent_card(snapshot, ai_result)
-            # Fallback if AI result missing
+            # Agent mode: send raw original, summary/translation handled separately
             return self.send(snapshot)
 
         return self.send(snapshot)
@@ -213,6 +211,84 @@ class TelegramNotifier(BaseNotifier):
 
         text = "\n".join(lines)
         return self._send_text(text, parse_mode="HTML")
+
+    def _send_agent_summary(
+        self,
+        chat_id: str,
+        result: AIAnalysisResult,
+        reply_to_message_id: int | None = None,
+    ) -> bool:
+        """
+        Send Agent mode summary message.
+        
+        Args:
+            chat_id: Target chat ID
+            result: AI analysis result with summary
+            reply_to_message_id: Optional ID of message to reply to (threads summary under original)
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        cat_icon = CATEGORY_ICONS.get(result.category, "📧")
+        pri_label = PRIORITY_LABELS.get(result.priority, "🟡 Medium")
+
+        lines = [
+            f"🤖 <b>AI Summary</b>  {cat_icon} {self._escape_html(result.category)}  |  {pri_label}",
+            f"💡 {self._escape_html(result.summary)}",
+        ]
+        if result.extracted_code:
+            lines.append(f"🔑 Code: <code>{self._escape_html(result.extracted_code)}</code>")
+
+        text = "\n".join(lines)
+
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        if reply_to_message_id:
+            payload["reply_to_message_id"] = reply_to_message_id
+
+        return self._api_call("sendMessage", payload) is not None
+
+    def _send_agent_translation(
+        self,
+        chat_id: str,
+        result: AIAnalysisResult,
+        reply_to_message_id: int | None = None,
+    ) -> bool:
+        """
+        Send Agent mode translation message.
+        
+        Only sends if translation is available.
+        
+        Args:
+            chat_id: Target chat ID
+            result: AI analysis result with translation
+            reply_to_message_id: Optional ID of message to reply to
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not result.translation:
+            return True  # No translation to send, consider it successful
+        
+        lines = [
+            f"🌐 <b>Translation</b>",
+            f"{self._escape_html(result.translation)}",
+        ]
+
+        text = "\n".join(lines)
+
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        if reply_to_message_id:
+            payload["reply_to_message_id"] = reply_to_message_id
+
+        return self._api_call("sendMessage", payload) is not None
 
     # ──────────────────────────────────────────────
     #  /settings dashboard (multi-level inline keyboard)

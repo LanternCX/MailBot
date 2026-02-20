@@ -317,7 +317,24 @@ class ServiceManager:
             try:
                 if isinstance(notifier, TelegramNotifier):
                     target_lang = self._bot_handler.language if self._bot_handler else None
-                    ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang)
+                    
+                    if current_mode == OperationMode.AGENT and ai_result:
+                        # Agent mode: send original, then auto Summary and Translation
+                        ok = notifier.send(snapshot)
+                        if ok:
+                            # Send Summary
+                            notifier._send_agent_summary(
+                                chat_id=notifier._config.chat_id,
+                                result=ai_result,
+                            )
+                            # Send Translation if needed (source language differs from target)
+                            if ai_result.source_language and target_lang and ai_result.source_language != target_lang:
+                                notifier._send_agent_translation(
+                                    chat_id=notifier._config.chat_id,
+                                    result=ai_result,
+                                )
+                    else:
+                        ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang)
                 else:
                     ok = notifier.send(snapshot)
 

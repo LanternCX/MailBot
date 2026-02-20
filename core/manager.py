@@ -293,12 +293,13 @@ class ServiceManager:
         # Determine current mode and run AI if needed
         current_mode = OperationMode.RAW
         ai_result = None
+        source_language = None
 
         if self._bot_handler:
             current_mode = self._bot_handler.mode
 
-            # Hybrid and Agent modes: run AI to get source language and analysis
-            if current_mode in (OperationMode.HYBRID, OperationMode.AGENT):
+            # Only Agent mode runs full AI upfront; Hybrid mode runs AI on-demand (button click)
+            if current_mode == OperationMode.AGENT:
                 from core.ai import analyze_email
                 rules_block = self._bot_handler.rules_block if self._bot_handler else None
                 ai_result = analyze_email(
@@ -308,10 +309,16 @@ class ServiceManager:
                     config=self._config.ai,
                     rules_block=rules_block,
                 )
+                source_language = ai_result.source_language if ai_result else None
+            
+            # Hybrid mode: detect language (heuristic only, no AI) for Translate button decision
+            elif current_mode == OperationMode.HYBRID:
+                from core.ai import detect_language_simple
+                source_language = detect_language_simple(snapshot.body_text)
 
-            # Cache email for potential hybrid callback
+            # Cache email for potential callbacks (Hybrid Summary/Translate/Original, Agent Original/Translate)
             if self._bot_handler:
-                self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
+                self._bot_handler.cache_email(snapshot, source_language)
 
         for notifier in self._notifiers:
             try:
@@ -319,22 +326,20 @@ class ServiceManager:
                     target_lang = self._bot_handler.language if self._bot_handler else None
                     
                     if current_mode == OperationMode.AGENT and ai_result:
-                        # Agent mode: send original, then auto Summary and Translation
-                        ok = notifier.send(snapshot)
-                        if ok:
-                            # Send Summary
-                            notifier._send_agent_summary(
-                                chat_id=notifier._config.chat_id,
-                                result=ai_result,
-                            )
-                            # Send Translation if needed (source language differs from target)
-                            if ai_result.source_language and target_lang and ai_result.source_language != target_lang:
-                                notifier._send_agent_translation(
-                                    chat_id=notifier._config.chat_id,
-                                    result=ai_result,
-                                )
+                        # Agent mode: auto-send AI Summary with buttons for Original/Translate
+                        notifier._send_agent_summary(
+                            chat_id=notifier._config.chat_id,
+                            result=ai_result,
+                            uid=snapshot.uid,
+                            source_language=ai_result.source_language if ai_result else None,
+                            target_language=target_lang,
+                        )
+                        ok = True
+                        # Cache email for manual Original/Translate callbacks
+                        if self._bot_handler:
+                            self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
                     else:
-                        ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang)
+                        ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang, source_language)
                 else:
                     ok = notifier.send(snapshot)
 

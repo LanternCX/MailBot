@@ -88,6 +88,7 @@ class TelegramNotifier(BaseNotifier):
         mode: OperationMode,
         ai_result: AIAnalysisResult | None = None,
         target_language: str | None = None,
+        source_language: str | None = None,
     ) -> bool:
         """
         Send notification with mode-aware formatting.
@@ -99,15 +100,17 @@ class TelegramNotifier(BaseNotifier):
         Args:
             snapshot: Email snapshot to send
             mode: Operation mode
-            ai_result: AI analysis result (used in Hybrid mode)
-            target_language: User's target language setting (used in Hybrid mode)
+            ai_result: AI analysis result (used in Agent mode)
+            target_language: User's target language setting
+            source_language: Detected source language (used in Hybrid mode for button decision)
         """
         if mode == OperationMode.RAW:
             return self.send(snapshot)
 
         elif mode == OperationMode.HYBRID:
-            source_lang = ai_result.source_language if ai_result else None
-            return self._send_hybrid(snapshot, source_lang, target_language)
+            # Use detected source language (from heuristic) or AI result
+            src_lang = source_language or (ai_result.source_language if ai_result else None)
+            return self._send_hybrid(snapshot, src_lang, target_language)
 
         elif mode == OperationMode.AGENT:
             # Agent mode: send raw original, summary/translation handled separately
@@ -165,6 +168,7 @@ class TelegramNotifier(BaseNotifier):
         # Build inline keyboard with buttons
         buttons: list[dict] = [
             {"text": "✨ AI Summary", "callback_data": f"summ_{snapshot.uid}"},
+            {"text": "📖 Original", "callback_data": f"orig_{snapshot.uid}"},
         ]
         
         # Add Translate button only if source language differs from target language
@@ -216,15 +220,21 @@ class TelegramNotifier(BaseNotifier):
         self,
         chat_id: str,
         result: AIAnalysisResult,
+        uid: str | None = None,
+        source_language: str | None = None,
+        target_language: str | None = None,
         reply_to_message_id: int | None = None,
     ) -> bool:
         """
-        Send Agent mode summary message.
+        Send Agent mode summary message with buttons for Original and Translate.
         
         Args:
             chat_id: Target chat ID
             result: AI analysis result with summary
-            reply_to_message_id: Optional ID of message to reply to (threads summary under original)
+            uid: Email UID for button callbacks
+            source_language: Source language for Translate button decision
+            target_language: Target language for Translate button decision
+            reply_to_message_id: Optional ID of message to reply to
             
         Returns:
             True if successful, False otherwise.
@@ -248,6 +258,19 @@ class TelegramNotifier(BaseNotifier):
         }
         if reply_to_message_id:
             payload["reply_to_message_id"] = reply_to_message_id
+
+        # Add buttons for Original and optional Translate
+        if uid:
+            buttons: list[dict] = [
+                {"text": "📖 Original", "callback_data": f"orig_{uid}"},
+            ]
+            
+            # Add Translate button only if source language differs from target language
+            if source_language and target_language and source_language != target_language:
+                buttons.append({"text": "🌐 Translate", "callback_data": f"trans_{uid}"})
+            
+            keyboard = {"inline_keyboard": [buttons]}
+            payload["reply_markup"] = keyboard
 
         return self._api_call("sendMessage", payload) is not None
 
@@ -419,6 +442,20 @@ class TelegramNotifier(BaseNotifier):
             "chat_id": chat_id,
             "message_id": message_id,
             "reply_markup": {"inline_keyboard": []},  # Empty keyboard removes all buttons
+        }
+        return self._api_call("editMessageReplyMarkup", payload) is not None
+
+    def edit_message_reply_markup(
+        self,
+        chat_id: str,
+        message_id: int,
+        reply_markup: dict,
+    ) -> bool:
+        """Edit only the inline keyboard of an existing message (keep text unchanged)."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": reply_markup,
         }
         return self._api_call("editMessageReplyMarkup", payload) is not None
 

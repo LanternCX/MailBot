@@ -360,3 +360,67 @@ def should_skip_ai(body: str) -> bool:
         return True
 
     return False
+
+def detect_language_simple(text: str) -> str | None:
+    """
+    Simple heuristic language detection without external dependencies.
+    Returns ISO 639-1 code (e.g., 'zh', 'en', 'ja') or None if uncertain.
+    
+    Used in Hybrid mode to decide whether to show Translate button.
+    Not accurate, but sufficient for button visibility logic.
+    
+    Args:
+        text: Email body text to analyze (will sample first 1000 chars)
+    
+    Returns:
+        Language code or None
+    """
+    if not text:
+        return None
+    
+    sample = text[:1000]
+    
+    # Count character types
+    cjk_count = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff' or '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' or '\uac00' <= c <= '\ud7af')
+    arabic_count = sum(1 for c in sample if '\u0600' <= c <= '\u06ff')
+    cyrillic_count = sum(1 for c in sample if '\u0400' <= c <= '\u04ff')
+    latin_count = sum(1 for c in sample if ord(c) < 128 and c.isalpha())
+    
+    total_chars = len([c for c in sample if c.isalpha()])
+    
+    if total_chars == 0:
+        return None
+    
+    # Determine language by highest character type ratio
+    cjk_ratio = cjk_count / total_chars
+    arabic_ratio = arabic_count / total_chars
+    cyrillic_ratio = cyrillic_count / total_chars
+    latin_ratio = latin_count / total_chars
+    
+    # Detect CJK (Chinese, Japanese, Korean)
+    if cjk_ratio > 0.3:
+        # Try to distinguish between Chinese, Japanese, Korean
+        hiragana_katakana = sum(1 for c in sample if '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff')
+        hangul = sum(1 for c in sample if '\uac00' <= c <= '\ud7af')
+        hanzi = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff')
+        
+        if hiragana_katakana > hanzi:
+            return 'ja'  # Japanese (has hiragana/katakana)
+        elif hangul > hanzi:
+            return 'ko'  # Korean (has Hangul)
+        else:
+            return 'zh'  # Chinese (has Hanzi)
+    
+    # Detect Arabic
+    if arabic_ratio > 0.3:
+        return 'ar'
+    
+    # Detect Russian/Cyrillic
+    if cyrillic_ratio > 0.3:
+        return 'ru'
+    
+    # Default to English for Latin-script languages
+    if latin_ratio > 0.7:
+        return 'en'
+    
+    return None

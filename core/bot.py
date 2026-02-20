@@ -520,6 +520,10 @@ class TelegramBotHandler:
         elif data.startswith("summ_"):
             self._cb_summary(cq_id, data, chat_id, message_id)
 
+        # ── Hybrid show original ──
+        elif data.startswith("orig_"):
+            self._cb_show_original(cq_id, data, chat_id, message_id)
+
         # ── Hybrid AI translation ──
         elif data.startswith("trans_"):
             self._cb_translate(cq_id, data, chat_id, message_id)
@@ -672,9 +676,6 @@ class TelegramBotHandler:
         if result.extracted_code:
             lines.append(f"🔑 Code: <code>{esc(result.extracted_code)}</code>")
 
-        # Translation block
-        if result.translation:
-            lines.append(f"\n🌐 <b>Translation</b>\n{esc(result.translation)}")
         if snapshot.web_link:
             lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
 
@@ -689,9 +690,6 @@ class TelegramBotHandler:
                 "reply_to_message_id": message_id,
             },
         )
-
-        # Remove the inline keyboard (buttons) from the original message, keeping the text
-        self._notifier.remove_message_keyboard(chat_id, message_id)
 
     def _cb_translate(
         self,
@@ -754,8 +752,54 @@ class TelegramBotHandler:
             },
         )
 
-        # Remove the inline keyboard (buttons) from the original message, keeping the text
-        self._notifier.remove_message_keyboard(chat_id, message_id)
+    def _cb_show_original(
+        self,
+        cq_id: str,
+        data: str,
+        chat_id: str,
+        message_id: int,
+    ) -> None:
+        """Handle hybrid mode show original email callback: orig_{uid}."""
+        uid = data.replace("orig_", "")
+
+        self._notifier.answer_callback_query(cq_id, "Loading original email…")
+
+        snapshot = self._get_cached_email(uid)
+        if not snapshot:
+            logger.warning("No cached email for uid=%s", uid)
+            self._notifier.edit_message_text(
+                chat_id,
+                message_id,
+                "⚠️ Email cache expired; cannot show original.",
+            )
+            return
+
+        esc = TelegramNotifier._escape_html
+
+        lines = [
+            f"📧 <b>Original Email</b>",
+            f"👤 From: {esc(snapshot.sender)}",
+            f"📌 Subject: {esc(snapshot.subject)}",
+        ]
+        if snapshot.date:
+            lines.append(f"🕐 Date: {snapshot.date.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        lines.append(f"\n📝 <b>Content:</b>\n{esc(snapshot.body_text)}")
+        
+        if snapshot.web_link:
+            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+
+        text = "\n".join(lines)
+
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_to_message_id": message_id,
+            },
+        )
 
     # ──────────────────────────────────────────────
     #  Helpers

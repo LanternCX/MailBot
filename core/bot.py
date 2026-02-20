@@ -53,6 +53,18 @@ class TelegramBotHandler:
         default_mode: OperationMode = OperationMode.HYBRID,
         config_path: Path = CONFIG_PATH,
     ) -> None:
+        """
+        Initialize Telegram bot handler with notifier and AI configuration.
+        
+        Sets up thread-safe state management for mode, language, and AI settings,
+        initializes rules manager, and prepares email cache for hybrid callback mode.
+        
+        Args:
+            notifier: TelegramNotifier instance for sending messages.
+            ai_config: AIConfig with provider, model, language, and enabled flag.
+            default_mode: Initial operation mode (Raw/Hybrid/Agent), defaults to Hybrid.
+            config_path: Path to config.json for persisting rule changes.
+        """
         self._notifier = notifier
         self._ai_config = ai_config
         self._config_path = config_path

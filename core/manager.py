@@ -50,6 +50,17 @@ class ServiceManager:
         on_status_change: Callable[[AccountStatus], None] | None = None,
         on_email_forwarded: Callable[[EmailSnapshot], None] | None = None,
     ) -> None:
+        """
+        Initialize ServiceManager with configuration and optional callbacks.
+        
+        Sets up IMAP fetchers, notification adapters (Telegram, etc.), bot handler,
+        and service state management. Initializes stats tracking and thread control.
+        
+        Args:
+            config: AppConfig containing accounts, notifiers, AI, and system settings.
+            on_status_change: Optional callback invoked when account status changes.
+            on_email_forwarded: Optional callback invoked after email is forwarded.
+        """
         self._config = config
         self._on_status_change = on_status_change
         self._on_email_forwarded = on_email_forwarded

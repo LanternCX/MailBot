@@ -297,12 +297,8 @@ class ServiceManager:
         if self._bot_handler:
             current_mode = self._bot_handler.mode
 
-            # Cache email for potential hybrid callback
-            if self._bot_handler:
-                self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
-
-            # Agent mode: always run AI
-            if current_mode == OperationMode.AGENT:
+            # Hybrid and Agent modes: run AI to get source language and analysis
+            if current_mode in (OperationMode.HYBRID, OperationMode.AGENT):
                 from core.ai import analyze_email
                 rules_block = self._bot_handler.rules_block if self._bot_handler else None
                 ai_result = analyze_email(
@@ -312,6 +308,10 @@ class ServiceManager:
                     config=self._config.ai,
                     rules_block=rules_block,
                 )
+
+            # Cache email for potential hybrid callback
+            if self._bot_handler:
+                self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
 
         for notifier in self._notifiers:
             try:

@@ -425,6 +425,9 @@ class TelegramBotHandler:
         reply_message_id = reply.get("message_id", 0)
         logger.info("/ai command — analyzing reply message %d", reply_message_id)
 
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
+
         # Build runtime config snapshot with current language
         runtime_config = self._runtime_ai_config()
 
@@ -629,6 +632,9 @@ class TelegramBotHandler:
                 "⚠️ Email cache expired; cannot generate summary.",
             )
             return
+
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
 
         runtime_config = self._runtime_ai_config()
 

@@ -430,6 +430,20 @@ class TelegramNotifier(BaseNotifier):
         payload = {"commands": commands}
         return self._api_call("setMyCommands", payload) is not None
 
+    def send_chat_action(self, chat_id: str, action: str = "typing") -> bool:
+        """
+        Send a chat action (e.g., 'typing') to show user that bot is processing.
+        
+        Args:
+            chat_id: Target chat ID
+            action: Action type ('typing', 'upload_photo', 'record_video', etc.)
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        payload = {"chat_id": chat_id, "action": action}
+        return self._api_call("sendChatAction", payload) is not None
+
     # ──────────────────────────────────────────────
     #  Low-level API helpers
     # ──────────────────────────────────────────────

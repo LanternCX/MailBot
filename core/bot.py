@@ -79,6 +79,8 @@ class TelegramBotHandler:
 
         # Cache: uid -> EmailSnapshot body for hybrid callback
         self._email_cache: dict[str, EmailSnapshot] = {}
+        # Cache: uid -> source_language for hybrid mode translate button decision
+        self._source_language_cache: dict[str, str | None] = {}
         self._cache_lock = threading.Lock()
 
         # /rules conversation state: chat_id → "add" | "delete" | None
@@ -128,18 +130,25 @@ class TelegramBotHandler:
     #  Email cache (for hybrid callback)
     # ──────────────────────────────────────────────
 
-    def cache_email(self, snapshot: EmailSnapshot) -> None:
-        """Store email snapshot for later AI callback."""
+    def cache_email(self, snapshot: EmailSnapshot, source_language: str | None = None) -> None:
+        """Store email snapshot and its source language for later AI callback."""
         with self._cache_lock:
             self._email_cache[snapshot.uid] = snapshot
+            if source_language:
+                self._source_language_cache[snapshot.uid] = source_language
             if len(self._email_cache) > 200:
                 oldest = list(self._email_cache.keys())[:100]
                 for key in oldest:
                     self._email_cache.pop(key, None)
+                    self._source_language_cache.pop(key, None)
 
     def _get_cached_email(self, uid: str) -> EmailSnapshot | None:
         with self._cache_lock:
             return self._email_cache.get(uid)
+
+    def _get_cached_source_language(self, uid: str) -> str | None:
+        with self._cache_lock:
+            return self._source_language_cache.get(uid)
 
     # ──────────────────────────────────────────────
     #  Config persistence
@@ -511,6 +520,10 @@ class TelegramBotHandler:
         elif data.startswith("summ_"):
             self._cb_summary(cq_id, data, chat_id, message_id)
 
+        # ── Hybrid AI translation ──
+        elif data.startswith("trans_"):
+            self._cb_translate(cq_id, data, chat_id, message_id)
+
         # ── Rules inline buttons ──
         elif data == "rules_add":
             with self._rules_lock:
@@ -678,6 +691,70 @@ class TelegramBotHandler:
         )
 
         # Delete the original message with the AI Summary button
+        self._notifier.delete_message(chat_id, message_id)
+
+    def _cb_translate(
+        self,
+        cq_id: str,
+        data: str,
+        chat_id: str,
+        message_id: int,
+    ) -> None:
+        """Handle hybrid mode AI translation callback: trans_{uid}."""
+        uid = data.replace("trans_", "")
+
+        self._notifier.answer_callback_query(cq_id, "Generating translation…")
+
+        snapshot = self._get_cached_email(uid)
+        if not snapshot:
+            logger.warning("No cached email for uid=%s", uid)
+            self._notifier.edit_message_text(
+                chat_id,
+                message_id,
+                "⚠️ Email cache expired; cannot generate translation.",
+            )
+            return
+
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
+
+        runtime_config = self._runtime_ai_config()
+
+        result = analyze_email(
+            subject=snapshot.subject,
+            sender=snapshot.sender,
+            body=snapshot.body_text,
+            config=runtime_config,
+            rules_block=self.rules_block,
+        )
+
+        esc = TelegramNotifier._escape_html
+
+        lines = [
+            f"🌐 <b>Translation</b>",
+        ]
+        
+        if result.translation:
+            lines.append(f"{esc(result.translation)}")
+        else:
+            lines.append("⚠️ No translation available.")
+        
+        if snapshot.web_link:
+            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+
+        text = "\n".join(lines)
+
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_to_message_id": message_id,
+            },
+        )
+
+        # Delete the original message with the Translate button
         self._notifier.delete_message(chat_id, message_id)
 
     # ──────────────────────────────────────────────

@@ -87,6 +87,7 @@ class TelegramNotifier(BaseNotifier):
         snapshot: EmailSnapshot,
         mode: OperationMode,
         ai_result: AIAnalysisResult | None = None,
+        target_language: str | None = None,
     ) -> bool:
         """
         Send notification with mode-aware formatting.
@@ -94,12 +95,19 @@ class TelegramNotifier(BaseNotifier):
         Mode A (Raw):    plain forward
         Mode B (Hybrid): short preview + AI button, or direct forward
         Mode C (Agent):  structured AI card
+        
+        Args:
+            snapshot: Email snapshot to send
+            mode: Operation mode
+            ai_result: AI analysis result (used in Hybrid and Agent modes)
+            target_language: User's target language setting (used in Hybrid mode)
         """
         if mode == OperationMode.RAW:
             return self.send(snapshot)
 
         elif mode == OperationMode.HYBRID:
-            return self._send_hybrid(snapshot)
+            source_lang = ai_result.source_language if ai_result else None
+            return self._send_hybrid(snapshot, source_lang, target_language)
 
         elif mode == OperationMode.AGENT:
             if ai_result:
@@ -113,11 +121,21 @@ class TelegramNotifier(BaseNotifier):
     #  Hybrid mode
     # ──────────────────────────────────────────────
 
-    def _send_hybrid(self, snapshot: EmailSnapshot) -> bool:
+    def _send_hybrid(
+        self,
+        snapshot: EmailSnapshot,
+        source_language: str | None = None,
+        target_language: str | None = None,
+    ) -> bool:
         """
         Hybrid mode: check content and decide format.
         - Short / code-like → direct forward
-        - Long content → preview + AI summary button
+        - Long content → preview + AI summary button + optional translate button
+        
+        Args:
+            snapshot: Email snapshot to send
+            source_language: Detected source language (from AI analysis)
+            target_language: User's target language setting
         """
         from core.ai import should_skip_ai
 
@@ -146,12 +164,16 @@ class TelegramNotifier(BaseNotifier):
 
         text = "\n".join(lines)
 
-        # Inline keyboard with AI summary button
-        keyboard = {
-            "inline_keyboard": [[
-                {"text": "✨ AI Summary", "callback_data": f"summ_{snapshot.uid}"},
-            ]]
-        }
+        # Build inline keyboard with buttons
+        buttons: list[dict] = [
+            {"text": "✨ AI Summary", "callback_data": f"summ_{snapshot.uid}"},
+        ]
+        
+        # Add Translate button only if source language differs from target language
+        if source_language and target_language and source_language != target_language:
+            buttons.append({"text": "🌐 Translate", "callback_data": f"trans_{snapshot.uid}"})
+        
+        keyboard = {"inline_keyboard": [buttons]}
 
         return self._send_text(text, reply_markup=keyboard, parse_mode="HTML")
 

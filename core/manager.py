@@ -298,7 +298,8 @@ class ServiceManager:
             current_mode = self._bot_handler.mode
 
             # Cache email for potential hybrid callback
-            self._bot_handler.cache_email(snapshot)
+            if self._bot_handler:
+                self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
 
             # Agent mode: always run AI
             if current_mode == OperationMode.AGENT:
@@ -315,7 +316,8 @@ class ServiceManager:
         for notifier in self._notifiers:
             try:
                 if isinstance(notifier, TelegramNotifier):
-                    ok = notifier.send_with_mode(snapshot, current_mode, ai_result)
+                    target_lang = self._bot_handler.language if self._bot_handler else None
+                    ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang)
                 else:
                     ok = notifier.send(snapshot)
 

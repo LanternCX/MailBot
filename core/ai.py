@@ -293,21 +293,24 @@ def analyze_email(
             logger.error("litellm data files missing and could not be recreated")
             return _default_result()
 
-    # Truncate body to ~2000 chars for cost and latency
+    # Step 1: Truncate body to ~2000 chars for cost and latency
     truncated_body = body[:2000] if len(body) > 2000 else body
 
-    # Build dynamic system prompt (Feat 3: config → rules → base)
+    # Step 2: Build dynamic system prompt (Feat 3: config → rules → base)
     system_prompt = build_system_prompt(config, rules_block)
 
+    # Step 3: Format user message with email metadata
     user_msg = USER_PROMPT_TEMPLATE.format(
         sender=sender,
         subject=subject,
         body=truncated_body,
     )
 
+    # Step 4: Prepare LLM provider-specific parameters (model, API key, base URL)
     params = _build_litellm_params(config)
 
     try:
+        # Step 5: Bypass socket-level proxy to avoid double-proxying with httpx
         with _bypass_socket_proxy():
             response = litellm.completion(
                 messages=[
@@ -321,11 +324,13 @@ def analyze_email(
                 **params,
             )
 
+        # Step 6: Extract and validate JSON response
         raw = response.choices[0].message.content  # type: ignore[union-attr]
         if not raw:
             logger.warning("LLM returned empty content")
             return _default_result()
 
+        # Step 7: Parse JSON into AIAnalysisResult model (handles markdown fences)
         result = _parse_response(raw)
         logger.info(
             "AI analysis OK: category=%s priority=%d source_lang=%s",

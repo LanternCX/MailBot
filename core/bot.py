@@ -482,7 +482,18 @@ class TelegramBotHandler:
     # ──────────────────────────────────────────────
 
     def _handle_callback_query(self, cq: dict[str, Any]) -> None:
-        """Handle inline keyboard callback queries."""
+        """
+        Handle inline keyboard callback queries from Telegram.
+        
+        Routes callbacks to appropriate handlers based on callback_data prefix:
+        - settings_* → Dashboard navigation
+        - lang_* → Language switching
+        - mode_* → Operation mode switching
+        - summ_* → AI summary generation
+        - orig_* → Show original email
+        - trans_* → Translation generation
+        - rules_* → Rules management
+        """
         cq_id = cq.get("id", "")
         data = cq.get("data", "")
         message = cq.get("message", {})
@@ -698,7 +709,14 @@ class TelegramBotHandler:
         chat_id: str,
         message_id: int,
     ) -> None:
-        """Handle hybrid mode AI translation callback: trans_{uid}."""
+        """
+        Handle hybrid mode AI translation callback: trans_{uid}.
+        
+        Retrieves cached email, runs AI analysis with current language settings,
+        and sends translation result as a new message (not editing original).
+        
+        Falls back gracefully if email cache has expired.
+        """
         uid = data.replace("trans_", "")
 
         self._notifier.answer_callback_query(cq_id, "Generating translation…")

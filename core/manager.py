@@ -298,6 +298,10 @@ class ServiceManager:
         if self._bot_handler:
             current_mode = self._bot_handler.mode
 
+            # RAW mode: no AI processing, plain forward only
+            # AGENT mode: run full AI upfront for auto-summary with buttons
+            # HYBRID mode: cache email for on-demand AI (button-triggered)
+            
             # Only Agent mode runs full AI upfront; Hybrid mode runs AI on-demand (button click)
             if current_mode == OperationMode.AGENT:
                 from core.ai import analyze_email
@@ -339,8 +343,10 @@ class ServiceManager:
                         if self._bot_handler:
                             self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
                     else:
+                        # RAW or HYBRID mode: send with mode-aware formatting and optional buttons
                         ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang, source_language)
                 else:
+                    # Non-Telegram notifiers: simple forward, no mode awareness
                     ok = notifier.send(snapshot)
 
                 if ok:

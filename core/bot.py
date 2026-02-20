@@ -690,8 +690,8 @@ class TelegramBotHandler:
             },
         )
 
-        # Delete the original message with the AI Summary button
-        self._notifier.delete_message(chat_id, message_id)
+        # Remove the inline keyboard (buttons) from the original message, keeping the text
+        self._notifier.remove_message_keyboard(chat_id, message_id)
 
     def _cb_translate(
         self,
@@ -754,8 +754,8 @@ class TelegramBotHandler:
             },
         )
 
-        # Delete the original message with the Translate button
-        self._notifier.delete_message(chat_id, message_id)
+        # Remove the inline keyboard (buttons) from the original message, keeping the text
+        self._notifier.remove_message_keyboard(chat_id, message_id)
 
     # ──────────────────────────────────────────────
     #  Helpers

@@ -413,6 +413,15 @@ class TelegramNotifier(BaseNotifier):
         payload = {"chat_id": chat_id, "message_id": message_id}
         return self._api_call("deleteMessage", payload) is not None
 
+    def remove_message_keyboard(self, chat_id: str, message_id: int) -> bool:
+        """Remove inline keyboard from a message (keep text, remove buttons)."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": {"inline_keyboard": []},  # Empty keyboard removes all buttons
+        }
+        return self._api_call("editMessageReplyMarkup", payload) is not None
+
     # ── Settings panel builders ──
 
     @staticmethod

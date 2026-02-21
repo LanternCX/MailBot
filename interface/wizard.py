@@ -264,12 +264,22 @@ def _find_provider_option(provider: str) -> tuple[str | None, ProviderOption | N
 
 
 def ai_wizard(config: AppConfig) -> AIConfig | None:
-    """Interactive wizard to configure AI analysis settings."""
+    """
+    Interactive wizard to configure AI analysis settings.
+    
+    Steps through:
+    1. Enable/disable AI feature
+    2. Select provider group and specific provider
+    3. Configure API credentials and model
+    4. Set output language and operation mode
+    
+    Returns None if user cancels at any step.
+    """
     console.print("\n[bold cyan]── AI Configuration ──[/bold cyan]")
 
     existing = config.ai
 
-    # Step 1: Enable AI?
+    # Step 1: Enable AI analysis feature?
     enabled = questionary.confirm(
         "Enable AI analysis?",
         default=existing.enabled,
@@ -281,7 +291,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if not enabled:
         return AIConfig(enabled=False)
 
-    # Step 2: Provider group → provider
+    # Step 2a: Select provider group (OpenAI, Frontier, China, Local, etc.)
     existing_group, existing_opt = _find_provider_option(existing.provider)
     group_names = list(AI_PROVIDER_GROUPS.keys())
     provider_group = questionary.select(
@@ -294,6 +304,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if provider_group is None:
         return None
 
+    # Step 2b: Select specific provider from the chosen group
     group_options = AI_PROVIDER_GROUPS[provider_group]
     default_provider_id = str(
         existing_opt.get("provider") if existing_opt and existing_group == provider_group else group_options[0]["provider"]
@@ -314,6 +325,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if provider_id is None:
         return None
 
+    # Step 3a: Extract provider preset configuration
     preset: ProviderOption = next(opt for opt in group_options if opt["provider"] == provider_id)
     provider = str(preset["provider"])
     default_model = str(preset.get("model", ""))
@@ -321,7 +333,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     preset_base_url = str(preset.get("base_url", "")) or None
     allow_base_url = bool(preset.get("allow_base_url", False) or preset_base_url)
 
-    # Step 3: API Key (respect provider requirements)
+    # Step 3b: Configure API Key (respect provider requirements)
     api_key_str: str | None = None
     if requires_api_key:
         existing_key = existing.api_key.get_secret_value() if existing.api_key and existing.provider == provider else ""
@@ -333,7 +345,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
         if not api_key_str:
             console.print("[yellow]Warning: No API key provided.[/yellow]")
 
-    # Step 4: Model
+    # Step 3c: Configure model name
     model_default = existing.model if existing.provider == provider and existing.model else default_model
     model = questionary.text(
         "Model name:",
@@ -343,7 +355,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if not model:
         model = default_model or "gpt-4o-mini"
 
-    # Step 5: Base URL (for local/custom/proxy-capable endpoints)
+    # Step 3d: Configure base URL (for local/custom endpoints)
     base_url: str | None = None
     if allow_base_url:
         default_url = existing.base_url if existing.provider == provider else preset_base_url
@@ -355,7 +367,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     else:
         base_url = preset_base_url
 
-    # Step 6: Default mode
+    # Step 4: Configure default operation mode (Raw / Hybrid / Agent)
     mode_choice = questionary.select(
         "Default operation mode:",
         choices=[
@@ -370,7 +382,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if mode_choice is None:
         mode_choice = "hybrid"
 
-    # Step 7: Output language
+    # Step 5: Configure output language for AI summaries
     lang_choice = questionary.select(
         "AI output language:",
         choices=[
@@ -386,6 +398,7 @@ def ai_wizard(config: AppConfig) -> AIConfig | None:
     if lang_choice is None:
         lang_choice = "auto"
 
+    # Return complete AI configuration
     return AIConfig(
         enabled=True,
         provider=provider,

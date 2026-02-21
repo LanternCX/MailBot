@@ -293,21 +293,24 @@ def analyze_email(
             logger.error("litellm data files missing and could not be recreated")
             return _default_result()
 
-    # Truncate body to ~2000 chars for cost and latency
+    # Step 1: Truncate body to ~2000 chars for cost and latency
     truncated_body = body[:2000] if len(body) > 2000 else body
 
-    # Build dynamic system prompt (Feat 3: config → rules → base)
+    # Step 2: Build dynamic system prompt (Feat 3: config → rules → base)
     system_prompt = build_system_prompt(config, rules_block)
 
+    # Step 3: Format user message with email metadata
     user_msg = USER_PROMPT_TEMPLATE.format(
         sender=sender,
         subject=subject,
         body=truncated_body,
     )
 
+    # Step 4: Prepare LLM provider-specific parameters (model, API key, base URL)
     params = _build_litellm_params(config)
 
     try:
+        # Step 5: Bypass socket-level proxy to avoid double-proxying with httpx
         with _bypass_socket_proxy():
             response = litellm.completion(
                 messages=[
@@ -321,11 +324,13 @@ def analyze_email(
                 **params,
             )
 
+        # Step 6: Extract and validate JSON response
         raw = response.choices[0].message.content  # type: ignore[union-attr]
         if not raw:
             logger.warning("LLM returned empty content")
             return _default_result()
 
+        # Step 7: Parse JSON into AIAnalysisResult model (handles markdown fences)
         result = _parse_response(raw)
         logger.info(
             "AI analysis OK: category=%s priority=%d source_lang=%s",
@@ -360,3 +365,67 @@ def should_skip_ai(body: str) -> bool:
         return True
 
     return False
+
+def detect_language_simple(text: str) -> str | None:
+    """
+    Simple heuristic language detection without external dependencies.
+    Returns ISO 639-1 code (e.g., 'zh', 'en', 'ja') or None if uncertain.
+    
+    Used in Hybrid mode to decide whether to show Translate button.
+    Not accurate, but sufficient for button visibility logic.
+    
+    Args:
+        text: Email body text to analyze (will sample first 1000 chars)
+    
+    Returns:
+        Language code or None
+    """
+    if not text:
+        return None
+    
+    sample = text[:1000]
+    
+    # Count character types
+    cjk_count = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff' or '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' or '\uac00' <= c <= '\ud7af')
+    arabic_count = sum(1 for c in sample if '\u0600' <= c <= '\u06ff')
+    cyrillic_count = sum(1 for c in sample if '\u0400' <= c <= '\u04ff')
+    latin_count = sum(1 for c in sample if ord(c) < 128 and c.isalpha())
+    
+    total_chars = len([c for c in sample if c.isalpha()])
+    
+    if total_chars == 0:
+        return None
+    
+    # Determine language by highest character type ratio
+    cjk_ratio = cjk_count / total_chars
+    arabic_ratio = arabic_count / total_chars
+    cyrillic_ratio = cyrillic_count / total_chars
+    latin_ratio = latin_count / total_chars
+    
+    # Detect CJK (Chinese, Japanese, Korean)
+    if cjk_ratio > 0.3:
+        # Try to distinguish between Chinese, Japanese, Korean
+        hiragana_katakana = sum(1 for c in sample if '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff')
+        hangul = sum(1 for c in sample if '\uac00' <= c <= '\ud7af')
+        hanzi = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff')
+        
+        if hiragana_katakana > hanzi:
+            return 'ja'  # Japanese (has hiragana/katakana)
+        elif hangul > hanzi:
+            return 'ko'  # Korean (has Hangul)
+        else:
+            return 'zh'  # Chinese (has Hanzi)
+    
+    # Detect Arabic
+    if arabic_ratio > 0.3:
+        return 'ar'
+    
+    # Detect Russian/Cyrillic
+    if cyrillic_ratio > 0.3:
+        return 'ru'
+    
+    # Default to English for Latin-script languages
+    if latin_ratio > 0.7:
+        return 'en'
+    
+    return None

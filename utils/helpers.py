@@ -28,7 +28,7 @@ BANNER = r"""
 /_/  /_/\__,_/_/_/ /_____/\____/\__/
 """
 
-VERSION = "1.0.0"
+VERSION = "1.1.1"
 
 
 def show_banner() -> None:

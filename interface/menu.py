@@ -130,15 +130,19 @@ def _run_service(config: AppConfig) -> None:
 
 
 def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
-    """Run the account configuration wizard."""
-    # Show existing accounts
+    """Run the account configuration wizard.
+    
+    Allows user to add, remove, or view email accounts.
+    """
+    # Step 1: Display existing accounts (if any)
     if config.accounts:
         raw = [a.model_dump() for a in config.accounts]
-        # Mask passwords
+        # Mask passwords for display
         for a in raw:
             a["password"] = "***"
         show_accounts_table(raw)
 
+    # Step 2: Prompt user for action
     action = questionary.select(
         "Account action:",
         choices=["Add Account", "Remove Account", "Back"],
@@ -146,6 +150,7 @@ def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
         pointer="›",
     ).ask()
 
+    # Step 3: Handle add action
     if action == "Add Account":
         new_acc = account_wizard()
         if new_acc:
@@ -153,10 +158,12 @@ def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
             config.save(config_path)
             console.print("[green]Account added and saved.[/green]")
 
+    # Step 4: Handle remove action
     elif action == "Remove Account":
         if not config.accounts:
             console.print("[dim]No accounts to remove.[/dim]")
         else:
+            # Build list of account display names with email
             names = [f"{a.name} ({a.email})" for a in config.accounts]
             to_remove = questionary.select(
                 "Remove which account?",
@@ -164,6 +171,7 @@ def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
                 qmark="▸",
                 pointer="›",
             ).ask()
+            # Remove selected account and persist
             if to_remove and to_remove != "Cancel":
                 idx = names.index(to_remove)
                 removed = config.accounts.pop(idx)
@@ -174,11 +182,12 @@ def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
 
 
 def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
-    """Configure poll interval, retries, and log level."""
+    """Configure poll interval, retries, log level, and proxy settings."""
     console.print(
         f"[dim]Current:[/dim] interval={config.poll_interval}s  retries={config.max_retries}  log={config.log_level}"
     )
 
+    # Step 1: Configure polling interval
     poll = questionary.text(
         "Polling interval (seconds, >=10):",
         default=str(config.poll_interval),
@@ -186,6 +195,7 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
         qmark="▸",
     ).ask()
 
+    # Step 2: Configure max retries
     retries = questionary.text(
         "Max retries (>=1):",
         default=str(config.max_retries),
@@ -193,6 +203,7 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
         qmark="▸",
     ).ask()
 
+    # Step 3: Configure log level
     log_level = questionary.select(
         "Log level:",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -201,18 +212,20 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
         pointer="›",
     ).ask()
 
+    # Step 4: Validate and persist core system settings
     if poll and retries and log_level:
         config.poll_interval = int(poll)
         config.max_retries = int(retries)
         config.log_level = log_level.upper()
 
-        # Proxy settings
+        # Step 5: Ask about proxy configuration
         use_proxy = questionary.confirm(
             "Enable global proxy for IMAP/HTTP?",
             default=bool(config.proxy and config.proxy.enabled),
             qmark="▸",
         ).ask()
 
+        # Step 6: Configure proxy if enabled
         if use_proxy:
             scheme = questionary.select(
                 "Proxy scheme:",
@@ -259,6 +272,7 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
         else:
             config.proxy = None
 
+        # Step 7: Save all settings and update runtime environment
         config.save(config_path)
         setup_logging(level=config.log_level)
         apply_global_proxy(config.proxy)

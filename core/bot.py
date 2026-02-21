@@ -53,6 +53,18 @@ class TelegramBotHandler:
         default_mode: OperationMode = OperationMode.HYBRID,
         config_path: Path = CONFIG_PATH,
     ) -> None:
+        """
+        Initialize Telegram bot handler with notifier and AI configuration.
+        
+        Sets up thread-safe state management for mode, language, and AI settings,
+        initializes rules manager, and prepares email cache for hybrid callback mode.
+        
+        Args:
+            notifier: TelegramNotifier instance for sending messages.
+            ai_config: AIConfig with provider, model, language, and enabled flag.
+            default_mode: Initial operation mode (Raw/Hybrid/Agent), defaults to Hybrid.
+            config_path: Path to config.json for persisting rule changes.
+        """
         self._notifier = notifier
         self._ai_config = ai_config
         self._config_path = config_path
@@ -79,6 +91,8 @@ class TelegramBotHandler:
 
         # Cache: uid -> EmailSnapshot body for hybrid callback
         self._email_cache: dict[str, EmailSnapshot] = {}
+        # Cache: uid -> source_language for hybrid mode translate button decision
+        self._source_language_cache: dict[str, str | None] = {}
         self._cache_lock = threading.Lock()
 
         # /rules conversation state: chat_id → "add" | "delete" | None
@@ -128,18 +142,25 @@ class TelegramBotHandler:
     #  Email cache (for hybrid callback)
     # ──────────────────────────────────────────────
 
-    def cache_email(self, snapshot: EmailSnapshot) -> None:
-        """Store email snapshot for later AI callback."""
+    def cache_email(self, snapshot: EmailSnapshot, source_language: str | None = None) -> None:
+        """Store email snapshot and its source language for later AI callback."""
         with self._cache_lock:
             self._email_cache[snapshot.uid] = snapshot
+            if source_language:
+                self._source_language_cache[snapshot.uid] = source_language
             if len(self._email_cache) > 200:
                 oldest = list(self._email_cache.keys())[:100]
                 for key in oldest:
                     self._email_cache.pop(key, None)
+                    self._source_language_cache.pop(key, None)
 
     def _get_cached_email(self, uid: str) -> EmailSnapshot | None:
         with self._cache_lock:
             return self._email_cache.get(uid)
+
+    def _get_cached_source_language(self, uid: str) -> str | None:
+        with self._cache_lock:
+            return self._source_language_cache.get(uid)
 
     # ──────────────────────────────────────────────
     #  Config persistence
@@ -425,6 +446,9 @@ class TelegramBotHandler:
         reply_message_id = reply.get("message_id", 0)
         logger.info("/ai command — analyzing reply message %d", reply_message_id)
 
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
+
         # Build runtime config snapshot with current language
         runtime_config = self._runtime_ai_config()
 
@@ -470,7 +494,18 @@ class TelegramBotHandler:
     # ──────────────────────────────────────────────
 
     def _handle_callback_query(self, cq: dict[str, Any]) -> None:
-        """Handle inline keyboard callback queries."""
+        """
+        Handle inline keyboard callback queries from Telegram.
+        
+        Routes callbacks to appropriate handlers based on callback_data prefix:
+        - settings_* → Dashboard navigation
+        - lang_* → Language switching
+        - mode_* → Operation mode switching
+        - summ_* → AI summary generation
+        - orig_* → Show original email
+        - trans_* → Translation generation
+        - rules_* → Rules management
+        """
         cq_id = cq.get("id", "")
         data = cq.get("data", "")
         message = cq.get("message", {})
@@ -507,6 +542,14 @@ class TelegramBotHandler:
         # ── Hybrid AI summary ──
         elif data.startswith("summ_"):
             self._cb_summary(cq_id, data, chat_id, message_id)
+
+        # ── Hybrid show original ──
+        elif data.startswith("orig_"):
+            self._cb_show_original(cq_id, data, chat_id, message_id)
+
+        # ── Hybrid AI translation ──
+        elif data.startswith("trans_"):
+            self._cb_translate(cq_id, data, chat_id, message_id)
 
         # ── Rules inline buttons ──
         elif data == "rules_add":
@@ -630,6 +673,9 @@ class TelegramBotHandler:
             )
             return
 
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
+
         runtime_config = self._runtime_ai_config()
 
         result = analyze_email(
@@ -653,9 +699,123 @@ class TelegramBotHandler:
         if result.extracted_code:
             lines.append(f"🔑 Code: <code>{esc(result.extracted_code)}</code>")
 
-        # Translation block
+        if snapshot.web_link:
+            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+
+        text = "\n".join(lines)
+
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_to_message_id": message_id,
+            },
+        )
+
+    def _cb_translate(
+        self,
+        cq_id: str,
+        data: str,
+        chat_id: str,
+        message_id: int,
+    ) -> None:
+        """
+        Handle hybrid mode AI translation callback: trans_{uid}.
+        
+        Retrieves cached email, runs AI analysis with current language settings,
+        and sends translation result as a new message (not editing original).
+        
+        Falls back gracefully if email cache has expired.
+        """
+        uid = data.replace("trans_", "")
+
+        self._notifier.answer_callback_query(cq_id, "Generating translation…")
+
+        snapshot = self._get_cached_email(uid)
+        if not snapshot:
+            logger.warning("No cached email for uid=%s", uid)
+            self._notifier.edit_message_text(
+                chat_id,
+                message_id,
+                "⚠️ Email cache expired; cannot generate translation.",
+            )
+            return
+
+        # Show typing status
+        self._notifier.send_chat_action(chat_id)
+
+        runtime_config = self._runtime_ai_config()
+
+        result = analyze_email(
+            subject=snapshot.subject,
+            sender=snapshot.sender,
+            body=snapshot.body_text,
+            config=runtime_config,
+            rules_block=self.rules_block,
+        )
+
+        esc = TelegramNotifier._escape_html
+
+        lines = [
+            f"🌐 <b>Translation</b>",
+        ]
+        
         if result.translation:
-            lines.append(f"\n🌐 <b>Translation</b>\n{esc(result.translation)}")
+            lines.append(f"{esc(result.translation)}")
+        else:
+            lines.append("⚠️ No translation available.")
+        
+        if snapshot.web_link:
+            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+
+        text = "\n".join(lines)
+
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_to_message_id": message_id,
+            },
+        )
+
+    def _cb_show_original(
+        self,
+        cq_id: str,
+        data: str,
+        chat_id: str,
+        message_id: int,
+    ) -> None:
+        """Handle hybrid mode show original email callback: orig_{uid}."""
+        uid = data.replace("orig_", "")
+
+        self._notifier.answer_callback_query(cq_id, "Loading original email…")
+
+        snapshot = self._get_cached_email(uid)
+        if not snapshot:
+            logger.warning("No cached email for uid=%s", uid)
+            self._notifier.edit_message_text(
+                chat_id,
+                message_id,
+                "⚠️ Email cache expired; cannot show original.",
+            )
+            return
+
+        esc = TelegramNotifier._escape_html
+
+        lines = [
+            f"📧 <b>Original Email</b>",
+            f"👤 From: {esc(snapshot.sender)}",
+            f"📌 Subject: {esc(snapshot.subject)}",
+        ]
+        if snapshot.date:
+            lines.append(f"🕐 Date: {snapshot.date.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        lines.append(f"\n📝 <b>Content:</b>\n{esc(snapshot.body_text)}")
+        
         if snapshot.web_link:
             lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
 

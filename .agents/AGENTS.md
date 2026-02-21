@@ -33,6 +33,16 @@
 - PRs should include a brief summary, tests run, and any config or docs changes.
 - If you touch user-facing behavior, update `docs/en/` (and `README_ZH.md` when applicable).
 
+## Git Workflow Governance
+- `git-workflow-guard` skill is the default governance entry for all commit-related checks: `/Users/caoxin/Code/MailBot/.agents/skills/git-workflow-guard/SKILL.md`.
+- All commits (human and agent) must follow Angular/Conventional Commit formatting and Git Flow branch naming.
+- Agent auto-commits must include the mapped agent-specific `Co-authored-by` footer defined in the skill.
+
 ## Security & Configuration Tips
 - `config.json` contains secrets; don’t commit it. Use `config.example.json` as a template.
 - Logs are written to `logs/`; sanitize data before sharing.
+
+## PROGRESS Tracking and Skill Synchronization
+- Added `PROGRESS.md` at the repository root for consistently summarizing problems, blockers, major changes, and lessons. Log every blocker or significant change here immediately to prevent repeating the same mistakes.
+- Each entry must include the related commit ID. After recording, evaluate whether `.agents/AGENTS.md` or any affected `.agents/skills/*/SKILL.md` files require updates to match the new workflow or skill behavior.
+- The new `progress-tracker` skill lives at `.agents/skills/progress-tracker/SKILL.md`. When using this workflow, read the skill instructions first, then follow the steps for updating PROGRESS, AGENTS, and the skill library while capturing the lessons learned.

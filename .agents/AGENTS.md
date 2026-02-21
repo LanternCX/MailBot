@@ -43,6 +43,8 @@
 - Logs are written to `logs/`; sanitize data before sharing.
 
 ## PROGRESS Tracking and Skill Synchronization
-- Added `PROGRESS.md` at the repository root for consistently summarizing problems, blockers, major changes, and lessons. Log every blocker or significant change here immediately to prevent repeating the same mistakes.
+- Use `.agents/PROGRESS.md` as the progress index and governance file.
+- Store each new record as an individual markdown file under `.agents/progress/entries/YYYY/` using `YYYY-MM-DD-N.md` naming.
+- Maintain a global TOC in `.agents/PROGRESS.md` with date-based page IDs (`YYYYMMDD-N`) mapped to date, title, path, and keywords.
 - Each entry must include the related commit ID. After recording, evaluate whether `.agents/AGENTS.md` or any affected `.agents/skills/*/SKILL.md` files require updates to match the new workflow or skill behavior.
-- The new `progress-tracker` skill lives at `.agents/skills/progress-tracker/SKILL.md`. When using this workflow, read the skill instructions first, then follow the steps for updating PROGRESS, AGENTS, and the skill library while capturing the lessons learned.
+- The `progress-tracker` skill lives at `.agents/skills/progress-tracker/SKILL.md`. When using this workflow, create/update both the entry file and TOC row, then sync AGENTS/skills documentation when process behavior changes.

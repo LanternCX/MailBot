@@ -30,3 +30,4 @@
 | 20260221-1 | 2026-02-21 | Initialized PROGRESS workflow and progress-tracker skill | `./progress/entries/2026/2026-02-21-1.md` | progress-tracker, governance, logging |
 | 20260221-2 | 2026-02-21 | Added git-workflow-guard governance skill | `./progress/entries/2026/2026-02-21-2.md` | git-flow, conventional-commits, co-author |
 | 20260222-1 | 2026-02-22 | Migrated PROGRESS to .agents structured entries | `./progress/entries/2026/2026-02-22-1.md` | toc, structure, indexing |
+| 20260226-1 | 2026-02-26 | Fused project skills with superpowers and migrated governance to .opencode | `./progress/entries/2026/2026-02-26-1.md` | superpowers, opencode, skills, governance |

@@ -33,18 +33,18 @@
 - PRs should include a brief summary, tests run, and any config or docs changes.
 - If you touch user-facing behavior, update `docs/en/` (and `README_ZH.md` when applicable).
 
-## Git Workflow Governance
-- `git-workflow-guard` skill is the default governance entry for all commit-related checks: `/Users/caoxin/Code/MailBot/.agents/skills/git-workflow-guard/SKILL.md`.
-- All commits (human and agent) must follow Angular/Conventional Commit formatting and Git Flow branch naming.
-- Agent auto-commits must include the mapped agent-specific `Co-authored-by` footer defined in the skill.
+## Skill Governance (Superpowers + Project Overrides)
+- Superpowers skills provide the default process workflow.
+- Project-specific overrides live in `.opencode/skills/` and only define MailBot-specific deltas.
+- `git-workflow-guard` is the governance entry for commit branch/message/footer checks: `.opencode/skills/git-workflow-guard/SKILL.md`.
 
 ## Security & Configuration Tips
-- `config.json` contains secrets; don’t commit it. Use `config.example.json` as a template.
+- `config.json` contains secrets; do not commit it. Use `config.example.json` as a template.
 - Logs are written to `logs/`; sanitize data before sharing.
 
 ## PROGRESS Tracking and Skill Synchronization
-- Use `.agents/PROGRESS.md` as the progress index and governance file.
-- Store each new record as an individual markdown file under `.agents/progress/entries/YYYY/` using `YYYY-MM-DD-N.md` naming.
-- Maintain a global TOC in `.agents/PROGRESS.md` with date-based page IDs (`YYYYMMDD-N`) mapped to date, title, path, and keywords.
-- Each entry must include the related commit ID. After recording, evaluate whether `.agents/AGENTS.md` or any affected `.agents/skills/*/SKILL.md` files require updates to match the new workflow or skill behavior.
-- The `progress-tracker` skill lives at `.agents/skills/progress-tracker/SKILL.md`. When using this workflow, create/update both the entry file and TOC row, then sync AGENTS/skills documentation when process behavior changes.
+- Use `.opencode/PROGRESS.md` as the progress index and governance file.
+- Store each new record as a markdown file under `.opencode/progress/entries/YYYY/` using `YYYY-MM-DD-N.md` naming.
+- Maintain a global TOC in `.opencode/PROGRESS.md` with date-based page IDs (`YYYYMMDD-N`) mapped to date, title, path, and keywords.
+- Each entry must include the related commit ID.
+- The `progress-tracker` skill lives at `.opencode/skills/progress-tracker/SKILL.md`.

@@ -1,13 +1,13 @@
 # PROGRESS Table of Contents
 
 ## Purpose
-- Keep long-term operational learning inside `.agents/` with a toolbook-style index.
+- Keep long-term operational learning inside `.opencode/` with a toolbook-style index.
 - Store each record in a dedicated entry file and use this file as the global lookup catalog.
 
 ## Storage Layout
-- TOC file: `.agents/PROGRESS.md`
-- Entry root: `.agents/progress/entries/`
-- Year folder pattern: `.agents/progress/entries/YYYY/`
+- TOC file: `.opencode/PROGRESS.md`
+- Entry root: `.opencode/progress/entries/`
+- Year folder pattern: `.opencode/progress/entries/YYYY/`
 - Entry filename pattern: `YYYY-MM-DD-N.md` (`N` starts from `1` per day)
 - Page ID pattern: `YYYYMMDD-N`
 

@@ -1,10 +1,14 @@
 ---
 name: git-workflow-guard
-description: Enforce Angular commit messages, Git Flow branches, and agent-specific Co-Author signatures for all commits.
+description: Use when creating branches or commits in this repository and you must enforce MailBot git-flow, commit format, and agent co-author footer rules.
 ---
 
 # Purpose
-Provide one reusable governance source for commit message quality, branch strategy, and agent auto-commit metadata.
+Provide one project-specific governance source for commit quality, branch strategy, and required agent co-author metadata.
+
+# Superpowers Boundary
+- Use superpowers for generic implementation and verification workflows.
+- This skill only defines MailBot-specific git governance rules.
 
 # When to Use
 - Before creating any commit for code, docs, config, or automation output.
@@ -13,13 +17,13 @@ Provide one reusable governance source for commit message quality, branch strate
 
 # Scope
 - Applies to all commits (human and agent-generated).
-- Applies to all branch activities involving `main`, `develop`, `feature/*`, `release/*`, and `hotfix/*`.
+- Applies to branch activities involving `main`, `develop`, `feature/*`, `release/*`, and `hotfix/*`.
 
 # Rules
 ## 1) Commit Message (Angular / Conventional Commits)
 - Header format: `type(scope): subject`.
 - Allowed `type`: `feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert`.
-- `subject` must start with lowercase, use imperative mood, avoid trailing period, and should stay concise (recommended <= 72 chars).
+- `subject` starts with lowercase, uses imperative mood, avoids trailing period, and should stay concise (recommended <= 72 chars).
 - Breaking changes must include `BREAKING CHANGE: ...` in body or footer.
 
 Examples:
@@ -43,18 +47,19 @@ Agent-generated commits must include a matching footer from the fixed mapping be
 
 - `codex` -> `Co-authored-by: Codex <codex@openai.com>`
 - `copilot` -> `Co-authored-by: GitHub Copilot <copilot@github.com>`
+- `opencode` -> `Co-authored-by: opencode-agent[bot] <opencode-agent[bot]@users.noreply.github.com>`
 
 Extension rule:
 - Before allowing a new agent to auto-commit, add its fixed `agent -> Co-authored-by` mapping in this skill.
 
 ## 4) Pre-commit Checklist
-- Is the current branch name compliant with Git Flow naming?
-- Does the commit message match Angular format and rules?
-- If this is an agent auto-commit, is the required `Co-authored-by` footer present and correct?
+- Branch name compliant with Git Flow naming.
+- Commit message matches Angular format and rules.
+- Agent auto-commit contains required `Co-authored-by` footer.
 
 # Deliverables
-- A clear compliance decision for the current commit request (`pass` or `fail`).
-- If failed: a concrete non-compliance list and fix template for message/branch/footer.
+- Compliance decision for current commit request (`pass` or `fail`).
+- If failed: concrete non-compliance list and a fix template for message/branch/footer.
 
 Fix template:
 1. Message: `type(scope): subject`

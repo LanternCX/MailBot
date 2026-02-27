@@ -25,12 +25,17 @@ from core.models import (
     OperationMode,
     TelegramNotifierConfig,
 )
-from core.notifiers.base import BaseNotifier
 
 logger = logging.getLogger("mailbot.notifier.telegram")
 
 # Priority label mapping
-PRIORITY_LABELS = {1: "🔴 Urgent", 2: "🟠 High", 3: "🟡 Medium", 4: "🔵 Low", 5: "⚪ Lowest"}
+PRIORITY_LABELS = {
+    1: "🔴 Urgent",
+    2: "🟠 High",
+    3: "🟡 Medium",
+    4: "🔵 Low",
+    5: "⚪ Lowest",
+}
 CATEGORY_ICONS = {
     "verification_code": "🔑",
     "notification": "📢",
@@ -56,7 +61,7 @@ MODE_LABELS: dict[OperationMode, str] = {
 }
 
 
-class TelegramNotifier(BaseNotifier):
+class TelegramNotifier:
     """Telegram Bot notifier using the sendMessage endpoint."""
 
     def __init__(self, config: TelegramNotifierConfig) -> None:
@@ -82,6 +87,28 @@ class TelegramNotifier(BaseNotifier):
         message_text = self.format_message(snapshot)
         return self._send_text(message_text)
 
+    def format_message(self, snapshot: EmailSnapshot) -> str:
+        """Default text rendering for raw message forwarding."""
+        lines = [
+            "📬 New mail",
+            "",
+            f"📧 Account: {snapshot.account_name}",
+            f"👤 From: {snapshot.sender}",
+            f"📌 Subject: {snapshot.subject}",
+        ]
+        if snapshot.date:
+            lines.append(f"🕐 Time: {snapshot.date.strftime('%Y-%m-%d %H:%M')}")
+        if snapshot.body_text:
+            preview = snapshot.body_text[:50]
+            if len(snapshot.body_text) > 50:
+                preview += "..."
+            lines.append("")
+            lines.append(f"📝 Preview:\n{preview}")
+        if snapshot.web_link:
+            lines.append("")
+            lines.append(f"🔗 Open in webmail: {snapshot.web_link}")
+        return "\n".join(lines)
+
     def send_with_mode(
         self,
         snapshot: EmailSnapshot,
@@ -96,7 +123,7 @@ class TelegramNotifier(BaseNotifier):
         Mode A (Raw):    plain forward
         Mode B (Hybrid): short preview + AI button, or direct forward
         Mode C (Agent):  original email only (summary/translation handled separately)
-        
+
         Args:
             snapshot: Email snapshot to send
             mode: Operation mode
@@ -109,7 +136,9 @@ class TelegramNotifier(BaseNotifier):
 
         elif mode == OperationMode.HYBRID:
             # Use detected source language (from heuristic) or AI result
-            src_lang = source_language or (ai_result.source_language if ai_result else None)
+            src_lang = source_language or (
+                ai_result.source_language if ai_result else None
+            )
             return self._send_hybrid(snapshot, src_lang, target_language)
 
         elif mode == OperationMode.AGENT:
@@ -132,7 +161,7 @@ class TelegramNotifier(BaseNotifier):
         Hybrid mode: check content and decide format.
         - Short / code-like → direct forward
         - Long content → preview + AI summary button + optional translate button
-        
+
         Args:
             snapshot: Email snapshot to send
             source_language: Detected source language (from AI analysis)
@@ -161,7 +190,7 @@ class TelegramNotifier(BaseNotifier):
             lines.append(f"🕐 Time: {snapshot.date.strftime('%Y-%m-%d %H:%M')}")
         lines.append(f"\n📝 Preview:\n{self._escape_html(preview)}")
         if snapshot.web_link:
-            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+            lines.append(f'\n🔗 <a href="{snapshot.web_link}">Open in webmail</a>')
 
         text = "\n".join(lines)
 
@@ -170,11 +199,13 @@ class TelegramNotifier(BaseNotifier):
             {"text": "✨ AI Summary", "callback_data": f"summ_{snapshot.uid}"},
             {"text": "📖 Original", "callback_data": f"orig_{snapshot.uid}"},
         ]
-        
+
         # Add Translate button only if source language differs from target language
         if source_language and target_language and source_language != target_language:
-            buttons.append({"text": "🌐 Translate", "callback_data": f"trans_{snapshot.uid}"})
-        
+            buttons.append(
+                {"text": "🌐 Translate", "callback_data": f"trans_{snapshot.uid}"}
+            )
+
         keyboard = {"inline_keyboard": [buttons]}
 
         return self._send_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -204,14 +235,18 @@ class TelegramNotifier(BaseNotifier):
         lines.append(f"\n💡 <b>AI Summary</b>\n{self._escape_html(result.summary)}")
 
         if result.extracted_code:
-            lines.append(f"\n🔑 <b>Code</b>: <code>{self._escape_html(result.extracted_code)}</code>")
+            lines.append(
+                f"\n🔑 <b>Code</b>: <code>{self._escape_html(result.extracted_code)}</code>"
+            )
 
         # Smart translation block (Feat 4)
         if result.translation:
-            lines.append(f"\n🌐 <b>Translation</b>\n{self._escape_html(result.translation)}")
+            lines.append(
+                f"\n🌐 <b>Translation</b>\n{self._escape_html(result.translation)}"
+            )
 
         if snapshot.web_link:
-            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+            lines.append(f'\n🔗 <a href="{snapshot.web_link}">Open in webmail</a>')
 
         text = "\n".join(lines)
         return self._send_text(text, parse_mode="HTML")
@@ -227,7 +262,7 @@ class TelegramNotifier(BaseNotifier):
     ) -> bool:
         """
         Send Agent mode summary message with buttons for Original and Translate.
-        
+
         Args:
             chat_id: Target chat ID
             result: AI analysis result with summary
@@ -235,7 +270,7 @@ class TelegramNotifier(BaseNotifier):
             source_language: Source language for Translate button decision
             target_language: Target language for Translate button decision
             reply_to_message_id: Optional ID of message to reply to
-            
+
         Returns:
             True if successful, False otherwise.
         """
@@ -247,7 +282,9 @@ class TelegramNotifier(BaseNotifier):
             f"💡 {self._escape_html(result.summary)}",
         ]
         if result.extracted_code:
-            lines.append(f"🔑 Code: <code>{self._escape_html(result.extracted_code)}</code>")
+            lines.append(
+                f"🔑 Code: <code>{self._escape_html(result.extracted_code)}</code>"
+            )
 
         text = "\n".join(lines)
 
@@ -264,11 +301,17 @@ class TelegramNotifier(BaseNotifier):
             buttons: list[dict] = [
                 {"text": "📖 Original", "callback_data": f"orig_{uid}"},
             ]
-            
+
             # Add Translate button only if source language differs from target language
-            if source_language and target_language and source_language != target_language:
-                buttons.append({"text": "🌐 Translate", "callback_data": f"trans_{uid}"})
-            
+            if (
+                source_language
+                and target_language
+                and source_language != target_language
+            ):
+                buttons.append(
+                    {"text": "🌐 Translate", "callback_data": f"trans_{uid}"}
+                )
+
             keyboard = {"inline_keyboard": [buttons]}
             payload["reply_markup"] = keyboard
 
@@ -282,20 +325,20 @@ class TelegramNotifier(BaseNotifier):
     ) -> bool:
         """
         Send Agent mode translation message.
-        
+
         Only sends if translation is available.
-        
+
         Args:
             chat_id: Target chat ID
             result: AI analysis result with translation
             reply_to_message_id: Optional ID of message to reply to
-            
+
         Returns:
             True if successful, False otherwise.
         """
         if not result.translation:
             return True  # No translation to send, consider it successful
-        
+
         lines = [
             f"🌐 <b>Translation</b>",
             f"{self._escape_html(result.translation)}",
@@ -441,7 +484,9 @@ class TelegramNotifier(BaseNotifier):
         payload: dict[str, Any] = {
             "chat_id": chat_id,
             "message_id": message_id,
-            "reply_markup": {"inline_keyboard": []},  # Empty keyboard removes all buttons
+            "reply_markup": {
+                "inline_keyboard": []
+            },  # Empty keyboard removes all buttons
         }
         return self._api_call("editMessageReplyMarkup", payload) is not None
 
@@ -483,7 +528,12 @@ class TelegramNotifier(BaseNotifier):
         return {
             "inline_keyboard": [
                 [{"text": "🌐 Language >", "callback_data": "settings_lang"}],
-                [{"text": f"⚙️ Mode: {MODE_LABELS.get(mode, mode.value)} >", "callback_data": "settings_mode"}],
+                [
+                    {
+                        "text": f"⚙️ Mode: {MODE_LABELS.get(mode, mode.value)} >",
+                        "callback_data": "settings_mode",
+                    }
+                ],
                 [{"text": "❌ Close", "callback_data": "settings_close"}],
             ]
         }
@@ -510,7 +560,9 @@ class TelegramNotifier(BaseNotifier):
             f"\n💡 Summary:\n{self._escape_html(result.summary)}",
         ]
         if result.extracted_code:
-            lines.append(f"\n🔑 Code: <code>{self._escape_html(result.extracted_code)}</code>")
+            lines.append(
+                f"\n🔑 Code: <code>{self._escape_html(result.extracted_code)}</code>"
+            )
 
         text = "\n".join(lines)
 
@@ -577,11 +629,11 @@ class TelegramNotifier(BaseNotifier):
     def send_chat_action(self, chat_id: str, action: str = "typing") -> bool:
         """
         Send a chat action (e.g., 'typing') to show user that bot is processing.
-        
+
         Args:
             chat_id: Target chat ID
             action: Action type ('typing', 'upload_photo', 'record_video', etc.)
-        
+
         Returns:
             True if successful, False otherwise.
         """
@@ -633,13 +685,19 @@ class TelegramNotifier(BaseNotifier):
                 data = response.json()
                 if data.get("ok"):
                     return data
-                logger.error("Telegram API error [%s]: %s", method, data.get("description", "Unknown"))
+                logger.error(
+                    "Telegram API error [%s]: %s",
+                    method,
+                    data.get("description", "Unknown"),
+                )
                 return None
             elif response.status_code == 401:
                 logger.error("Telegram auth failed (401), check bot token")
                 return None
             elif response.status_code == 429:
-                retry_after = response.json().get("parameters", {}).get("retry_after", 30)
+                retry_after = (
+                    response.json().get("parameters", {}).get("retry_after", 30)
+                )
                 logger.warning("Telegram rate limited, wait %d seconds", retry_after)
                 return None
             else:
@@ -652,7 +710,9 @@ class TelegramNotifier(BaseNotifier):
                 return None
 
         except requests.exceptions.Timeout:
-            logger.warning("Telegram [%s] timed out (%d s)", method, self._config.timeout)
+            logger.warning(
+                "Telegram [%s] timed out (%d s)", method, self._config.timeout
+            )
             return None
         except requests.exceptions.ConnectionError:
             logger.warning("Telegram [%s] connection failed", method)
@@ -664,11 +724,7 @@ class TelegramNotifier(BaseNotifier):
     @staticmethod
     def _escape_html(text: str) -> str:
         """Escape HTML special chars for Telegram parse_mode=HTML."""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def test_connection(self) -> bool:
         """Test Bot Token connectivity."""

@@ -1,0 +1,1 @@
+"""Email contracts and adapters."""

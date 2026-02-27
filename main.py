@@ -28,6 +28,7 @@ from utils.logger import setup_logging
 
 logger = logging.getLogger("mailbot.main")
 
+
 def default_config_path() -> Path:
     """Config path in the current working directory."""
     return Path.cwd() / "config.json"
@@ -40,7 +41,8 @@ def parse_args() -> argparse.Namespace:
         description="IMAP-to-Telegram mail forwarder (interactive CLI)",
     )
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=str,
         default=str(default_config_path()),
         help="Config file path (default: config.json in current directory)",
@@ -55,7 +57,7 @@ def parse_args() -> argparse.Namespace:
 
 def run_headless(config_path: Path) -> None:
     """Headless mode — start service, block until Ctrl+C."""
-    from core.manager import ServiceManager
+    from app.bootstrap import build_app
     from core.models import AppConfig
     from utils.helpers import apply_global_proxy
 
@@ -73,7 +75,8 @@ def run_headless(config_path: Path) -> None:
     apply_global_proxy(config.proxy)
     setup_logging(level=config.log_level)
 
-    manager = ServiceManager(config)
+    app = build_app(config_path)
+    manager = app.service_manager
     manager.start()
     logger.info("Headless mode — Ctrl+C to stop")
 
@@ -94,6 +97,7 @@ def run_headless(config_path: Path) -> None:
 
 def run_interactive(config_path: Path) -> None:
     """Interactive menu mode."""
+    from app.bootstrap import build_app
     from interface.menu import main_menu
     from core.models import AppConfig
     from utils.helpers import apply_global_proxy
@@ -103,6 +107,8 @@ def run_interactive(config_path: Path) -> None:
         cfg = AppConfig.load(config_path)
     except Exception:
         cfg = AppConfig()
+
+    build_app(config_path)
     apply_global_proxy(cfg.proxy)
 
     setup_logging(level="INFO")

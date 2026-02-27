@@ -15,3 +15,5 @@ coverage/
 .mypy_cache/
 *.sqlite3
 feature.md
+.worktrees/
+docs/plans/

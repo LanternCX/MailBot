@@ -16,7 +16,7 @@ import logging
 import threading
 import time
 from datetime import datetime
-from typing import Callable
+from typing import Any, Callable
 
 from core.fetcher import EmailFetcher
 from core.models import (
@@ -31,8 +31,7 @@ from core.models import (
     ServiceState,
     TelegramNotifierConfig,
 )
-from core.notifiers.base import BaseNotifier
-from core.notifiers.telegram import TelegramNotifier
+from core.chat.adapters.telegram_notifier import TelegramNotifier
 
 logger = logging.getLogger("mailbot.manager")
 
@@ -52,10 +51,10 @@ class ServiceManager:
     ) -> None:
         """
         Initialize ServiceManager with configuration and optional callbacks.
-        
+
         Sets up IMAP fetchers, notification adapters (Telegram, etc.), bot handler,
         and service state management. Initializes stats tracking and thread control.
-        
+
         Args:
             config: AppConfig containing accounts, notifiers, AI, and system settings.
             on_status_change: Optional callback invoked when account status changes.
@@ -80,7 +79,7 @@ class ServiceManager:
 
         # Components
         self._fetchers: list[EmailFetcher] = []
-        self._notifiers: list[BaseNotifier] = []
+        self._notifiers: list[Any] = []
 
         # Bot handler (for Telegram commands/callbacks)
         self._bot_handler = None
@@ -139,7 +138,7 @@ class ServiceManager:
                 self._notifiers.append(notifier)
                 logger.info("Notifier registered: %s", notifier.name)
 
-    def _create_notifier(self, nc: NotifierConfig) -> BaseNotifier | None:
+    def _create_notifier(self, nc: NotifierConfig) -> Any | None:
         """Factory for notifier instances."""
         if nc.type == "telegram" and nc.telegram:
             return TelegramNotifier(nc.telegram)
@@ -160,7 +159,7 @@ class ServiceManager:
 
     def _init_bot(self) -> None:
         """Initialize the Telegram bot handler for commands/callbacks."""
-        from core.bot import TelegramBotHandler
+        from service.mailbot.chat_handler import TelegramBotHandler
 
         ai_config = self._config.ai
 
@@ -176,7 +175,9 @@ class ServiceManager:
             self._bot_handler = None
             return
 
-        default_mode = ai_config.default_mode if ai_config.enabled else OperationMode.RAW
+        default_mode = (
+            ai_config.default_mode if ai_config.enabled else OperationMode.RAW
+        )
 
         self._bot_handler = TelegramBotHandler(
             notifier=tg_notifier,
@@ -312,11 +313,14 @@ class ServiceManager:
             # RAW mode: no AI processing, plain forward only
             # AGENT mode: run full AI upfront for auto-summary with buttons
             # HYBRID mode: cache email for on-demand AI (button-triggered)
-            
+
             # Only Agent mode runs full AI upfront; Hybrid mode runs AI on-demand (button click)
             if current_mode == OperationMode.AGENT:
                 from core.ai import analyze_email
-                rules_block = self._bot_handler.rules_block if self._bot_handler else None
+
+                rules_block = (
+                    self._bot_handler.rules_block if self._bot_handler else None
+                )
                 ai_result = analyze_email(
                     subject=snapshot.subject,
                     sender=snapshot.sender,
@@ -325,10 +329,11 @@ class ServiceManager:
                     rules_block=rules_block,
                 )
                 source_language = ai_result.source_language if ai_result else None
-            
+
             # Hybrid mode: detect language (heuristic only, no AI) for Translate button decision
             elif current_mode == OperationMode.HYBRID:
                 from core.ai import detect_language_simple
+
                 source_language = detect_language_simple(snapshot.body_text)
 
             # Cache email for potential callbacks (Hybrid Summary/Translate/Original, Agent Original/Translate)
@@ -338,24 +343,37 @@ class ServiceManager:
         for notifier in self._notifiers:
             try:
                 if isinstance(notifier, TelegramNotifier):
-                    target_lang = self._bot_handler.language if self._bot_handler else None
-                    
+                    target_lang = (
+                        self._bot_handler.language if self._bot_handler else None
+                    )
+
                     if current_mode == OperationMode.AGENT and ai_result:
                         # Agent mode: auto-send AI Summary with buttons for Original/Translate
                         notifier._send_agent_summary(
                             chat_id=notifier._config.chat_id,
                             result=ai_result,
                             uid=snapshot.uid,
-                            source_language=ai_result.source_language if ai_result else None,
+                            source_language=ai_result.source_language
+                            if ai_result
+                            else None,
                             target_language=target_lang,
                         )
                         ok = True
                         # Cache email for manual Original/Translate callbacks
                         if self._bot_handler:
-                            self._bot_handler.cache_email(snapshot, ai_result.source_language if ai_result else None)
+                            self._bot_handler.cache_email(
+                                snapshot,
+                                ai_result.source_language if ai_result else None,
+                            )
                     else:
                         # RAW or HYBRID mode: send with mode-aware formatting and optional buttons
-                        ok = notifier.send_with_mode(snapshot, current_mode, ai_result, target_lang, source_language)
+                        ok = notifier.send_with_mode(
+                            snapshot,
+                            current_mode,
+                            ai_result,
+                            target_lang,
+                            source_language,
+                        )
                 else:
                     # Non-Telegram notifiers: simple forward, no mode awareness
                     ok = notifier.send(snapshot)

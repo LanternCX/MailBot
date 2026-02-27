@@ -104,7 +104,14 @@ ANALYSIS_SCHEMA = {
             "description": "Translation of key content when languages differ, null otherwise",
         },
     },
-    "required": ["summary", "category", "priority", "extracted_code", "source_language", "translation"],
+    "required": [
+        "summary",
+        "category",
+        "priority",
+        "extracted_code",
+        "source_language",
+        "translation",
+    ],
     "additionalProperties": False,
 }
 
@@ -112,6 +119,7 @@ ANALYSIS_SCHEMA = {
 # ──────────────────────────────────────────────
 #  Prompt construction  (Feat 3: Runtime Injection)
 # ──────────────────────────────────────────────
+
 
 def build_system_prompt(config: AIConfig, rules_block: str | None = None) -> str:
     """
@@ -149,6 +157,7 @@ def build_system_prompt(config: AIConfig, rules_block: str | None = None) -> str
 # ──────────────────────────────────────────────
 #  Core helpers
 # ──────────────────────────────────────────────
+
 
 @contextmanager
 def _bypass_socket_proxy() -> Iterator[None]:
@@ -245,6 +254,7 @@ def _parse_response(raw_text: str) -> AIAnalysisResult:
 #  Public API
 # ──────────────────────────────────────────────
 
+
 def analyze_email(
     subject: str,
     sender: str,
@@ -278,7 +288,9 @@ def analyze_email(
 
         litellm.drop_params = True  # ignore unsupported params per provider
         litellm.aiohttp_trust_env = True  # honor HTTP_PROXY / HTTPS_PROXY as per docs
-        adopt_dependency_loggers(("LiteLLM",), level=get_active_log_level(), force_handlers=False)
+        adopt_dependency_loggers(
+            ("LiteLLM",), level=get_active_log_level(), force_handlers=False
+        )
     except ImportError:
         logger.error("litellm not installed — run: pip install litellm")
         return _default_result()
@@ -334,7 +346,9 @@ def analyze_email(
         result = _parse_response(raw)
         logger.info(
             "AI analysis OK: category=%s priority=%d source_lang=%s",
-            result.category, result.priority, result.source_language,
+            result.category,
+            result.priority,
+            result.source_language,
         )
         return result
 
@@ -366,66 +380,76 @@ def should_skip_ai(body: str) -> bool:
 
     return False
 
+
 def detect_language_simple(text: str) -> str | None:
     """
     Simple heuristic language detection without external dependencies.
     Returns ISO 639-1 code (e.g., 'zh', 'en', 'ja') or None if uncertain.
-    
+
     Used in Hybrid mode to decide whether to show Translate button.
     Not accurate, but sufficient for button visibility logic.
-    
+
     Args:
         text: Email body text to analyze (will sample first 1000 chars)
-    
+
     Returns:
         Language code or None
     """
     if not text:
         return None
-    
+
     sample = text[:1000]
-    
+
     # Count character types
-    cjk_count = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff' or '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' or '\uac00' <= c <= '\ud7af')
-    arabic_count = sum(1 for c in sample if '\u0600' <= c <= '\u06ff')
-    cyrillic_count = sum(1 for c in sample if '\u0400' <= c <= '\u04ff')
+    cjk_count = sum(
+        1
+        for c in sample
+        if "\u4e00" <= c <= "\u9fff"
+        or "\u3040" <= c <= "\u309f"
+        or "\u30a0" <= c <= "\u30ff"
+        or "\uac00" <= c <= "\ud7af"
+    )
+    arabic_count = sum(1 for c in sample if "\u0600" <= c <= "\u06ff")
+    cyrillic_count = sum(1 for c in sample if "\u0400" <= c <= "\u04ff")
     latin_count = sum(1 for c in sample if ord(c) < 128 and c.isalpha())
-    
+
     total_chars = len([c for c in sample if c.isalpha()])
-    
+
     if total_chars == 0:
         return None
-    
+
     # Determine language by highest character type ratio
     cjk_ratio = cjk_count / total_chars
     arabic_ratio = arabic_count / total_chars
     cyrillic_ratio = cyrillic_count / total_chars
     latin_ratio = latin_count / total_chars
-    
+
     # Detect CJK (Chinese, Japanese, Korean)
     if cjk_ratio > 0.3:
         # Try to distinguish between Chinese, Japanese, Korean
-        hiragana_katakana = sum(1 for c in sample if '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff')
-        hangul = sum(1 for c in sample if '\uac00' <= c <= '\ud7af')
-        hanzi = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff')
-        
+        hiragana_katakana = sum(
+            1 for c in sample if "\u3040" <= c <= "\u309f" or "\u30a0" <= c <= "\u30ff"
+        )
+        hangul = sum(1 for c in sample if "\uac00" <= c <= "\ud7af")
+        hanzi = sum(1 for c in sample if "\u4e00" <= c <= "\u9fff")
+
         if hiragana_katakana > hanzi:
-            return 'ja'  # Japanese (has hiragana/katakana)
+            return "ja"  # Japanese (has hiragana/katakana)
         elif hangul > hanzi:
-            return 'ko'  # Korean (has Hangul)
+            return "ko"  # Korean (has Hangul)
         else:
-            return 'zh'  # Chinese (has Hanzi)
-    
+            return "zh"  # Chinese (has Hanzi)
+
     # Detect Arabic
     if arabic_ratio > 0.3:
-        return 'ar'
-    
+        return "ar"
+
     # Detect Russian/Cyrillic
     if cyrillic_ratio > 0.3:
-        return 'ru'
-    
+        return "ru"
+
     # Default to English for Latin-script languages
     if latin_ratio > 0.7:
-        return 'en'
-    
+        return "en"
+
     return None

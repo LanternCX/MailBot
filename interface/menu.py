@@ -15,7 +15,7 @@ import questionary
 from pydantic import SecretStr
 from rich.console import Console
 
-from core.manager import ServiceManager
+from service.mailbot.manager import ServiceManager
 from core.models import AppConfig, ProxyConfig
 from interface.wizard import account_wizard, ai_wizard, bot_wizard
 from utils.helpers import (
@@ -100,10 +100,14 @@ def _run_service(config: AppConfig) -> None:
     setup_logging(level=config.log_level)
 
     if not config.accounts:
-        console.print("[yellow]Warning: No accounts configured. Run Config Wizard first.[/yellow]")
+        console.print(
+            "[yellow]Warning: No accounts configured. Run Config Wizard first.[/yellow]"
+        )
         return
     if not config.notifiers:
-        console.print("[yellow]Warning: No notifiers configured. Run Bot Settings first.[/yellow]")
+        console.print(
+            "[yellow]Warning: No notifiers configured. Run Bot Settings first.[/yellow]"
+        )
         return
 
     manager = ServiceManager(config)
@@ -131,7 +135,7 @@ def _run_service(config: AppConfig) -> None:
 
 def _config_wizard(config: AppConfig, config_path: Path) -> AppConfig:
     """Run the account configuration wizard.
-    
+
     Allows user to add, remove, or view email accounts.
     """
     # Step 1: Display existing accounts (if any)
@@ -245,21 +249,35 @@ def _system_settings(config: AppConfig, config_path: Path) -> AppConfig:
             port_str = questionary.text(
                 "Proxy port:",
                 default=str(config.proxy.port) if config.proxy else "1080",
-                validate=lambda v: v.isdigit() and 1 <= int(v) <= 65535 or "Enter 1-65535",
+                validate=lambda v: (
+                    v.isdigit() and 1 <= int(v) <= 65535 or "Enter 1-65535"
+                ),
                 qmark="▸",
             ).ask()
 
-            username = questionary.text(
-                "Proxy username (optional):",
-                default=config.proxy.username if config.proxy and config.proxy.username else "",
-                qmark="▸",
-            ).ask() or None
+            username = (
+                questionary.text(
+                    "Proxy username (optional):",
+                    default=config.proxy.username
+                    if config.proxy and config.proxy.username
+                    else "",
+                    qmark="▸",
+                ).ask()
+                or None
+            )
 
-            password = questionary.password(
-                "Proxy password (optional):",
-                default=(config.proxy.password.get_secret_value() if config.proxy and config.proxy.password else ""),
-                qmark="▸",
-            ).ask() or ""
+            password = (
+                questionary.password(
+                    "Proxy password (optional):",
+                    default=(
+                        config.proxy.password.get_secret_value()
+                        if config.proxy and config.proxy.password
+                        else ""
+                    ),
+                    qmark="▸",
+                ).ask()
+                or ""
+            )
 
             config.proxy = ProxyConfig(
                 enabled=True,
@@ -305,9 +323,7 @@ def _bot_settings(config: AppConfig, config_path: Path) -> AppConfig:
         nc = bot_wizard(config)
         if nc:
             # Replace existing telegram notifier or append
-            config.notifiers = [
-                n for n in config.notifiers if n.type != "telegram"
-            ]
+            config.notifiers = [n for n in config.notifiers if n.type != "telegram"]
             config.notifiers.append(nc)
             config.save(config_path)
             console.print("[green]Telegram bot saved.[/green]")
@@ -346,11 +362,13 @@ def _ai_settings(config: AppConfig, config_path: Path) -> AppConfig:
 
 def _test_connection(config: AppConfig) -> None:
     """Send a test message via Telegram."""
-    from core.notifiers.telegram import TelegramNotifier
+    from core.chat.adapters.telegram_notifier import TelegramNotifier
 
     tg_configs = [n for n in config.notifiers if n.type == "telegram" and n.telegram]
     if not tg_configs:
-        console.print("[yellow]No Telegram bot configured. Run Bot Settings first.[/yellow]")
+        console.print(
+            "[yellow]No Telegram bot configured. Run Bot Settings first.[/yellow]"
+        )
         return
 
     tg_cfg = tg_configs[0].telegram
@@ -385,4 +403,6 @@ def _test_connection(config: AppConfig) -> None:
             else:
                 console.print("[red]Error: Failed to send test message.[/red]")
     else:
-        console.print("[red]Error: Cannot reach Telegram API. Check token & network.[/red]")
+        console.print(
+            "[red]Error: Cannot reach Telegram API. Check token & network.[/red]"
+        )

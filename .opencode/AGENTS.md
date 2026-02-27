@@ -43,8 +43,7 @@
 - Logs are written to `logs/`; sanitize data before sharing.
 
 ## PROGRESS Tracking and Skill Synchronization
-- Use `.opencode/PROGRESS.md` as the progress index and governance file.
-- Store each new record as a markdown file under `.opencode/progress/entries/YYYY/` using `YYYY-MM-DD-N.md` naming.
-- Maintain a global TOC in `.opencode/PROGRESS.md` with date-based page IDs (`YYYYMMDD-N`) mapped to date, title, path, and keywords.
-- Each entry must include the related commit ID.
-- The `progress-tracker` skill lives at `.opencode/skills/progress-tracker/SKILL.md`.
+- Use `.progress/PROGRESS.md` as the canonical progress index.
+- Store each new record under `.progress/entries/YYYY/` using `YYYY-MM-DD-N.md` naming.
+- Maintain the Global TOC in `.progress/PROGRESS.md` with page IDs (`YYYYMMDD-N`) and append one row per entry.
+- Use superpowers `progress-bootstrap` when `.progress/` structure is missing, then log milestones with superpowers `progress-tracker`.

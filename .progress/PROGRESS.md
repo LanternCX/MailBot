@@ -32,3 +32,4 @@
 | 20260221-2 | 2026-02-21 | Added git-workflow-guard governance skill | `./entries/2026/2026-02-21-2.md` | git-flow, conventional-commits, co-author |
 | 20260222-1 | 2026-02-22 | Migrated PROGRESS to .agents structured entries | `./entries/2026/2026-02-22-1.md` | toc, structure, indexing |
 | 20260226-1 | 2026-02-26 | Fused project skills with superpowers and migrated governance to .opencode | `./entries/2026/2026-02-26-1.md` | superpowers, opencode, skills, governance |
+| 20260227-1 | 2026-02-27 | Hard-cut refactor to service-core architecture with isolated branch workflow | `./entries/2026/2026-02-27-1.md` | architecture, refactor, service-core, worktree |

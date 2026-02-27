@@ -1,9 +1,10 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `main.py` is the CLI entry point and service launcher.
-- `core/` holds the runtime engine: models, manager, fetcher, parser, AI logic, bot handlers, rules, and `notifiers/`.
-- `interface/` contains the Rich-based menu and configuration wizards.
+- `main.py` is the CLI entry point; `app/bootstrap.py` is the composition root.
+- `service/mailbot/` holds business orchestration (manager, chat handler, pipeline, policies, handlers).
+- `core/` holds reusable framework modules: `core/chat`, `core/ai`, `core/email`, and `core/runtime`.
+- `interface/` contains the Rich-based menu and configuration wizards (UI layer only).
 - `utils/` provides shared helpers and logging (`utils/logger.py`).
 - `docs/` includes setup and configuration guides; images live under `docs/img/`.
 - `test/` contains smoke and integration tests.
@@ -23,7 +24,9 @@
 - Keep user-facing text in English and avoid logging secrets.
 
 ## Testing Guidelines
-- Tests live under `test/` and use `unittest` (some commands use `pytest`).
+- Tests live under `test/` and run with `pytest` (legacy `unittest` style is still present in some files).
+- `python -m pytest test -v` runs the full regression suite.
+- `python -m pytest test/core test/service -v` runs architecture-focused tests.
 - `python -m unittest test.test_litellm_proxy` runs the proxy smoke test (requires valid `config.json` and API keys).
 - `python -m pytest test/test_proxy_double_proxy.py -v` runs the socket-proxy regression test.
 - `python test/smoketest_litellm.py` verifies PyInstaller bundle imports.

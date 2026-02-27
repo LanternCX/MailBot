@@ -31,7 +31,7 @@ from core.models import (
     EmailSnapshot,
     OperationMode,
 )
-from core.notifiers.telegram import TelegramNotifier
+from core.chat.adapters.telegram_notifier import TelegramNotifier
 from core.rules import RulesManager
 
 logger = logging.getLogger("mailbot.bot")
@@ -55,10 +55,10 @@ class TelegramBotHandler:
     ) -> None:
         """
         Initialize Telegram bot handler with notifier and AI configuration.
-        
+
         Sets up thread-safe state management for mode, language, and AI settings,
         initializes rules manager, and prepares email cache for hybrid callback mode.
-        
+
         Args:
             notifier: TelegramNotifier instance for sending messages.
             ai_config: AIConfig with provider, model, language, and enabled flag.
@@ -142,7 +142,9 @@ class TelegramBotHandler:
     #  Email cache (for hybrid callback)
     # ──────────────────────────────────────────────
 
-    def cache_email(self, snapshot: EmailSnapshot, source_language: str | None = None) -> None:
+    def cache_email(
+        self, snapshot: EmailSnapshot, source_language: str | None = None
+    ) -> None:
         """Store email snapshot and its source language for later AI callback."""
         with self._cache_lock:
             self._email_cache[snapshot.uid] = snapshot
@@ -170,7 +172,9 @@ class TelegramBotHandler:
         """Write current runtime AI settings back to config.json."""
         try:
             if not self._config_path.exists():
-                logger.warning("Config file not found, skip persist: %s", self._config_path)
+                logger.warning(
+                    "Config file not found, skip persist: %s", self._config_path
+                )
                 return
             raw = json.loads(self._config_path.read_text(encoding="utf-8"))
             ai = raw.setdefault("ai", {})
@@ -180,8 +184,12 @@ class TelegramBotHandler:
             self._config_path.write_text(
                 json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8"
             )
-            logger.info("AI config persisted: lang=%s mode=%s ai=%s",
-                        self.language, self.mode.value, self.ai_enabled)
+            logger.info(
+                "AI config persisted: lang=%s mode=%s ai=%s",
+                self.language,
+                self.mode.value,
+                self.ai_enabled,
+            )
         except Exception:
             logger.exception("Failed to persist AI config")
 
@@ -204,7 +212,11 @@ class TelegramBotHandler:
             daemon=True,
         )
         self._thread.start()
-        logger.info("Telegram bot handler started (mode=%s, lang=%s)", self._mode.value, self._language)
+        logger.info(
+            "Telegram bot handler started (mode=%s, lang=%s)",
+            self._mode.value,
+            self._language,
+        )
 
     def stop(self) -> None:
         """Stop the polling thread."""
@@ -331,21 +343,27 @@ class TelegramBotHandler:
         if sub == "add":
             with self._rules_lock:
                 self._rules_pending[chat_id] = "add"
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "📝 Send me the rule text you want to add.\n\nSend /rules to cancel.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "📝 Send me the rule text you want to add.\n\nSend /rules to cancel.",
+                    "parse_mode": "HTML",
+                },
+            )
             return
 
         if sub == "delete":
             with self._rules_lock:
                 self._rules_pending[chat_id] = "delete"
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "🗑 Send me the rule number to delete (e.g. <code>2</code>).\n\nSend /rules to cancel.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "🗑 Send me the rule number to delete (e.g. <code>2</code>).\n\nSend /rules to cancel.",
+                    "parse_mode": "HTML",
+                },
+            )
             return
 
         # Default: show rules list
@@ -373,21 +391,27 @@ class TelegramBotHandler:
             ]
         }
 
-        self._notifier._api_call("sendMessage", {
-            "chat_id": chat_id,
-            "text": msg,
-            "parse_mode": "HTML",
-            "reply_markup": json.dumps(keyboard),
-        })
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": msg,
+                "parse_mode": "HTML",
+                "reply_markup": json.dumps(keyboard),
+            },
+        )
 
     def _rules_add(self, chat_id: str, text: str) -> None:
         """Add a rule from user's natural language input."""
         count = self._rules.add_rule(text)
-        self._notifier._api_call("sendMessage", {
-            "chat_id": chat_id,
-            "text": f"✅ Rule added (total: {count}).\n\n<i>{self._notifier._escape_html(text)}</i>",
-            "parse_mode": "HTML",
-        })
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": f"✅ Rule added (total: {count}).\n\n<i>{self._notifier._escape_html(text)}</i>",
+                "parse_mode": "HTML",
+            },
+        )
         logger.info("Rule added by chat %s: %s", chat_id, text[:60])
 
     def _rules_delete(self, chat_id: str, text: str) -> None:
@@ -395,31 +419,41 @@ class TelegramBotHandler:
         text = text.strip()
         # Try to extract a number
         import re
+
         match = re.search(r"\d+", text)
         if not match:
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "⚠️ Please send a rule number (e.g. <code>2</code>).",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "⚠️ Please send a rule number (e.g. <code>2</code>).",
+                    "parse_mode": "HTML",
+                },
+            )
             return
 
         index = int(match.group())
         ok = self._rules.delete_rule(index)
         if ok:
             remaining = len(self._rules.load_rules())
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": f"✅ Rule #{index} deleted (remaining: {remaining}).",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": f"✅ Rule #{index} deleted (remaining: {remaining}).",
+                    "parse_mode": "HTML",
+                },
+            )
             logger.info("Rule #%d deleted by chat %s", index, chat_id)
         else:
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": f"⚠️ Rule #{index} not found.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": f"⚠️ Rule #{index} not found.",
+                    "parse_mode": "HTML",
+                },
+            )
 
     # ── /ai ──
 
@@ -427,20 +461,26 @@ class TelegramBotHandler:
         """Handle /ai command: must reply to a message, then analyze it."""
         reply = message.get("reply_to_message")
         if not reply:
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "⚠️ Please reply to a message before using /ai to analyze it.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "⚠️ Please reply to a message before using /ai to analyze it.",
+                    "parse_mode": "HTML",
+                },
+            )
             return
 
         reply_text = reply.get("text", "")
         if not reply_text:
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "⚠️ The replied message has no text to analyze.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "⚠️ The replied message has no text to analyze.",
+                    "parse_mode": "HTML",
+                },
+            )
             return
 
         reply_message_id = reply.get("message_id", 0)
@@ -482,12 +522,15 @@ class TelegramBotHandler:
         ]
         text = "\n".join(lines)
 
-        self._notifier._api_call("sendMessage", {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        })
+        self._notifier._api_call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+        )
 
     # ──────────────────────────────────────────────
     #  Callback query handler
@@ -496,7 +539,7 @@ class TelegramBotHandler:
     def _handle_callback_query(self, cq: dict[str, Any]) -> None:
         """
         Handle inline keyboard callback queries from Telegram.
-        
+
         Routes callbacks to appropriate handlers based on callback_data prefix:
         - settings_* → Dashboard navigation
         - lang_* → Language switching
@@ -517,14 +560,19 @@ class TelegramBotHandler:
 
         # ── Settings navigation ──
         if data == "settings_lang":
-            self._notifier.edit_settings_language_submenu(chat_id, message_id, self.language)
+            self._notifier.edit_settings_language_submenu(
+                chat_id, message_id, self.language
+            )
             self._notifier.answer_callback_query(cq_id)
         elif data == "settings_mode":
             self._notifier.edit_settings_mode_submenu(chat_id, message_id, self.mode)
             self._notifier.answer_callback_query(cq_id)
         elif data == "settings_back":
             self._notifier.edit_settings_main(
-                chat_id, message_id, self.mode, self.language,
+                chat_id,
+                message_id,
+                self.mode,
+                self.language,
             )
             self._notifier.answer_callback_query(cq_id)
         elif data == "settings_close":
@@ -556,20 +604,26 @@ class TelegramBotHandler:
             with self._rules_lock:
                 self._rules_pending[chat_id] = "add"
             self._notifier.answer_callback_query(cq_id, "Send me the rule text")
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "📝 Send me the rule text you want to add.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "📝 Send me the rule text you want to add.",
+                    "parse_mode": "HTML",
+                },
+            )
         elif data == "rules_delete":
             with self._rules_lock:
                 self._rules_pending[chat_id] = "delete"
             self._notifier.answer_callback_query(cq_id, "Send a rule number to delete")
-            self._notifier._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": "🗑 Send me the rule number to delete.",
-                "parse_mode": "HTML",
-            })
+            self._notifier._api_call(
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": "🗑 Send me the rule number to delete.",
+                    "parse_mode": "HTML",
+                },
+            )
         elif data == "rules_close":
             self._notifier.delete_message(chat_id, message_id)
             self._notifier.answer_callback_query(cq_id, "Rules closed")
@@ -592,7 +646,8 @@ class TelegramBotHandler:
         lang_code = data.replace("lang_", "")
 
         if lang_code == self.language:
-            from core.notifiers.telegram import LANGUAGE_LABELS
+            from core.chat.adapters.telegram_notifier import LANGUAGE_LABELS
+
             self._notifier.answer_callback_query(
                 cq_id, f"Already set to {LANGUAGE_LABELS.get(lang_code, lang_code)}"
             )
@@ -606,13 +661,17 @@ class TelegramBotHandler:
         # Persist to config.json
         self._persist_ai_config()
 
-        from core.notifiers.telegram import LANGUAGE_LABELS
+        from core.chat.adapters.telegram_notifier import LANGUAGE_LABELS
+
         label = LANGUAGE_LABELS.get(lang_code, lang_code)
         self._notifier.answer_callback_query(cq_id, f"✅ Language set to {label}")
 
         # Return to main settings menu
         self._notifier.edit_settings_main(
-            chat_id, message_id, self.mode, self.language,
+            chat_id,
+            message_id,
+            self.mode,
+            self.language,
         )
 
     def _cb_mode_switch(
@@ -633,7 +692,9 @@ class TelegramBotHandler:
 
         old_mode = self.mode
         if new_mode == old_mode:
-            self._notifier.answer_callback_query(cq_id, f"Already in {new_mode.value} mode")
+            self._notifier.answer_callback_query(
+                cq_id, f"Already in {new_mode.value} mode"
+            )
             return
 
         self.mode = new_mode
@@ -642,13 +703,17 @@ class TelegramBotHandler:
         # Persist
         self._persist_ai_config()
 
-        from core.notifiers.telegram import MODE_LABELS
+        from core.chat.adapters.telegram_notifier import MODE_LABELS
+
         label = MODE_LABELS.get(new_mode, new_mode.value)
         self._notifier.answer_callback_query(cq_id, f"✅ Switched to {label}")
 
         # Return to main settings menu
         self._notifier.edit_settings_main(
-            chat_id, message_id, self.mode, self.language,
+            chat_id,
+            message_id,
+            self.mode,
+            self.language,
         )
 
     def _cb_summary(
@@ -686,7 +751,7 @@ class TelegramBotHandler:
             rules_block=self.rules_block,
         )
 
-        from core.notifiers.telegram import CATEGORY_ICONS, PRIORITY_LABELS
+        from core.chat.adapters.telegram_notifier import CATEGORY_ICONS, PRIORITY_LABELS
 
         cat_icon = CATEGORY_ICONS.get(result.category, "📧")
         pri_label = PRIORITY_LABELS.get(result.priority, "🟡 Medium")
@@ -700,7 +765,7 @@ class TelegramBotHandler:
             lines.append(f"🔑 Code: <code>{esc(result.extracted_code)}</code>")
 
         if snapshot.web_link:
-            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+            lines.append(f'\n🔗 <a href="{snapshot.web_link}">Open in webmail</a>')
 
         text = "\n".join(lines)
 
@@ -723,10 +788,10 @@ class TelegramBotHandler:
     ) -> None:
         """
         Handle hybrid mode AI translation callback: trans_{uid}.
-        
+
         Retrieves cached email, runs AI analysis with current language settings,
         and sends translation result as a new message (not editing original).
-        
+
         Falls back gracefully if email cache has expired.
         """
         uid = data.replace("trans_", "")
@@ -761,14 +826,14 @@ class TelegramBotHandler:
         lines = [
             f"🌐 <b>Translation</b>",
         ]
-        
+
         if result.translation:
             lines.append(f"{esc(result.translation)}")
         else:
             lines.append("⚠️ No translation available.")
-        
+
         if snapshot.web_link:
-            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+            lines.append(f'\n🔗 <a href="{snapshot.web_link}">Open in webmail</a>')
 
         text = "\n".join(lines)
 
@@ -813,11 +878,11 @@ class TelegramBotHandler:
         ]
         if snapshot.date:
             lines.append(f"🕐 Date: {snapshot.date.strftime('%Y-%m-%d %H:%M:%S')}")
-        
+
         lines.append(f"\n📝 <b>Content:</b>\n{esc(snapshot.body_text)}")
-        
+
         if snapshot.web_link:
-            lines.append(f"\n🔗 <a href=\"{snapshot.web_link}\">Open in webmail</a>")
+            lines.append(f'\n🔗 <a href="{snapshot.web_link}">Open in webmail</a>')
 
         text = "\n".join(lines)
 

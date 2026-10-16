@@ -1,1 +1,0 @@
-"""MailBot notifier adapters."""

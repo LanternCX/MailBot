@@ -1,6 +1,6 @@
 # 安装指南
 
-MailBot 默认在当前工作目录查找 `config.json`；如果希望指定其他位置，请在启动时通过 `-c PATH` / `--config PATH` 参数指定。如果文件丢失，CLI 菜单或 Headless 模式运行会自动创建。
+MailBot 默认在当前工作目录查找 `config.json`；也可通过 `-c PATH` / `--config PATH` 指定。没有配置时运行交互菜单并完成设置；Headless 模式需要已有配置。构建与启动方式见 [服务文档](go-service.md)。
 
 ## Google/Gmail
 
@@ -56,7 +56,7 @@ MailBot 默认在当前工作目录查找 `config.json`；如果希望指定其�
 }
 ```
 
-启用代理后，MailBot 会自动设置 `http(s)_proxy` 环境变量，并通过代理路由 IMAP 套接字，因此所有网络流量 (IMAP 获取 + Telegram API) 都会遵循该配置。如果你更喜欢交互式操作，请使用 CLI 向导的系统设置。
+启用代理后，IMAP、Telegram 和 AI 请求都使用该代理，并由代理解析目标域名。程序不修改全局 socket 或代理环境变量。也可使用 CLI 向导的系统设置。
 
 ## 其他邮箱服务商
 

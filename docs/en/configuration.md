@@ -1,100 +1,57 @@
-# Configuration & Usage
+# Configuration and usage
 
-MailBot provides an interactive CLI menu to guide you through setup.
+Run the binary without arguments for the menu, or use `--headless -c PATH` for unattended operation. Configuration defaults to `config.json` in the working directory. `--check` validates without connecting or creating state. `--version` prints the build version.
 
-## Menu Options
+## Menu
 
-**Main Menu:**
-1.  **Start Service**: Launches the IMAP listener. Logs will be displayed live in the console.
-2.  **Config Wizard**: Add or remove email accounts.
-3.  **Bot Settings**: Manage your Telegram Bot configuration.
-4.  **AI Settings**: Configure AI analysis model, API provider, and behavior rules.
-5.  **System Settings**: Advanced configuration (polling, retries, logs).
-6.  **Test Connection**: Verify your Telegram setup.
-7.  **Exit**: Quit the application.
+Choose by number or full option name. Enter accepts the displayed default; `:cancel` abandons the current dialog. Secrets are hidden on a real terminal and saved values are not printed.
 
----
+The menu provides **Start Service** (Ctrl+C returns to the menu), **Config Wizard** (add/remove accounts and verify IMAP login), **Bot Settings** (set/remove bot), **AI Settings** (DeepSeek key, model, endpoint, mode and language), **System Settings** (polling, retries, console level and proxy), **Test Connection** (check Telegram and optionally send a test preview), and **Exit**. Cancelled dialogs do not save partial changes.
 
-## Detailed Settings
+## Processing and commands
 
-### 1. Config Wizard (Accounts)
+Each configured folder uses a separate IMAP connection. When the server supports IDLE, new-mail notifications trigger a UID scan immediately; a safety scan at the shorter of `poll_interval` and one minute recovers missed notifications. Otherwise the connection polls at `poll_interval`. Reconnection resumes from durable checkpoints. Delivery latency also depends on the mail provider, network and Telegram; no fixed latency is guaranteed.
 
-Add or manage your IMAP accounts here. You will need:
-*   **Provider**: Gmail (with App Password), Outlook, etc.
-*   **Email Address**: Your full email address.
-*   **Password**: Your **App Password** (not your login password).
-*   **IMAP Settings**: Usually auto-detected for common providers.
+In every mode, locally recognized verification emails send their full text without AI. Recognition checks the subject and first 4,000 body characters for common verification-code phrases; it can miss unfamiliar wording or match unrelated mail. A separate worker prevents ordinary AI analysis from blocking these messages. Workers share Telegram cooldowns; an ongoing send or rate limit can still delay delivery. Message-size and unread-only settings still apply.
 
-### 2. Bot Settings
+Raw sends metadata and a 50-character preview without AI. Hybrid skips AI controls for short/code/login messages; other previews have Summary, Original and conditional Translate controls. Agent generates summaries automatically. AI failures fall back to a preview with an Original control. Analysis uses up to 2,000 body characters with a 30-second timeout and at most two simultaneous calls.
 
-Configure your Telegram notification channel.
-*   **Start the Bot**: Search for your bot in Telegram and start a chat.
-*   **Enter User ID**: Your Telegram user ID (Chat ID).
-*   **Enter Token**: The API token from BotFather.
+`/settings` and `/mode` open the settings dashboard with language/mode submenus, Back and Close. `/rules` lists preferences with Add/Delete/Close buttons. `/rules add` and `/rules delete` prompt for the next message; `/rules` cancels. Direct `/rules add TEXT`, `/rules delete NUMBER` and `/rules clear` also work. Reply to text with `/ai`; the result replies to the referenced message. `/help`, `/start`, `/status`, `/mode raw|hybrid|agent` and `/language auto|zh|en|ja` are available.
 
-### 3. AI Settings
+Settings update the active JSON file and database; JSON edits made while stopped take effect at startup. Rules live in `rules.md` beside the configuration. Prompt priority is configuration language constraints, ordered user preferences, then base instructions. Rules guide AI output; they are not deterministic mail filters. Commands are limited to configured chat IDs; all members of a configured group can operate the bot.
 
-Configure AI analysis through LiteLLM with a two-level menu.
-*   **Enable/Disable**: Turn AI analysis on or off.
-*   **Provider Group → Platform**: Pick a group, then a specific platform. Presets cover OpenAI/OpenRouter/Together/Fireworks, Anthropic/Gemini/Mistral/Groq, DeepSeek/Qwen/Moonshot/Minimax, Perplexity/Cohere, plus Ollama and custom OpenAI-compatible endpoints.
-*   **API Key**: Prompted only when required by the selected platform.
-*   **Model**: Override the default model name shown in the menu.
-*   **Base URL**: Editable for Ollama, OpenRouter, Together, Fireworks, and custom OpenAI-compatible endpoints.
-*   **Default Mode & Language**: Choose the email processing mode:
-    - **Raw**: Simple forwarding without AI analysis (zero token cost)
-    - **Hybrid**: Email preview with optional AI analysis (**Recommended for cost-conscious users**)
-      - Email preview + three buttons: Summary, Original, Translate
-      - Summary button: On-demand AI analysis (costs tokens only when clicked)
-      - Original button: Show full email content (no cost, uses cached email)
-      - Translate button: Appears only if email language differs from target (costs tokens when clicked)
-      - **Savings**: 80-90% token savings vs Agent mode for typical users
-    - **Agent**: Automatic AI summary on every email (costs tokens upfront)
-      - Automatic AI summary for every email
-      - Original button: Show full email (no cost)
-      - Translate button: Manual translation (costs tokens when clicked)
-    
-    Also select the output language (auto-detect, or override to a specific language).
+## JSON
 
-### 4. Rules System
 
-You can manage AI behavior rules dynamically via Telegram, without editing files manually.
-*   Send `/rules` in Telegram to view active rules.
-*   Follow the bot's prompts to add or remove rules using natural language.
-*   These rules are persisted to `rules.md` and injected into the AI prompt.
-*   **Rule Execution**: Rules are evaluated in the order they appear in `rules.md`. If multiple rules match the same email, all applicable rules are executed sequentially.
-*   **Rule Priority**: More specific rules (e.g., matching specific sender + keyword) should be placed before broader rules to avoid conflicts.
+See `config.example.json` at the repository root. Config and SQLite contain secrets/mail content and should remain private.
 
-Examples:
-> "Add rule: Ignore all emails from no-reply@example.com"
-> "Add rule: If the email contains a verification code, extract and bold it"
-> "Add rule: Flag emails about project deadlines with ⚠️"
+| Field | Default | Purpose |
+| --- | --- | --- |
+| poll_interval | 60 | Poll seconds without IDLE; also bounds the IDLE safety-scan interval, minimum 10 |
+| max_retries | 3 | Fast retries before continued periodic reconnection |
+| log_level | INFO | DEBUG, INFO, WARNING, ERROR, CRITICAL |
+| network_timeout | 30 | IMAP operation and proxy handshake seconds |
+| state_path | mailbot.sqlite3 | SQLite path relative to the configuration directory |
+| unread_only | true | Fetch only unread messages among new UIDs; false also catches mail read elsewhere |
+| mark_seen | true | Mark read only after durable enqueue; false preserves unread state |
+| max_message_bytes | 0 | No default message-size limit; positive values replace oversized bodies with a notice |
+| accounts | [] | name, email, password, imap_host, imap_port (993), use_ssl (true), folders (INBOX), enabled (true), web_url |
+| notifiers | [] | type=telegram, enabled, telegram: bot_token, chat_id, api_base, timeout (30) |
+| proxy | null | enabled, scheme (socks5/socks4/http), host, port, username/password |
+| ai | disabled | enabled, provider, api_key, model, base_url, default_mode (hybrid), language (auto) |
 
-### 5. System Settings
+`use_ssl: false` uses ordinary unencrypted IMAP, as in the existing configuration format. All three proxy schemes apply to IMAP, Telegram and AI with proxy-side destination DNS; no global socket or environment mutation is used. Without a proxy, connections are direct.
 
-Customize the behavior of the mail fetcher.
-*   **Polling Interval**: How often (in seconds) to check for new emails. (Default: 60s, Min: 10s)
-    - **Recommendations**:
-      - **10-30s**: For critical accounts where immediate notification is important (e.g., security alerts, urgent work emails)
-      - **60s**: Balanced setting for most users. Good for normal inbox monitoring.
-      - **300s+ (5+ min)**: For low-volume accounts or when you prefer less frequent checks to reduce API usage.
-*   **Max Retries**: Number of retry attempts on network failure before giving up on a fetch cycle. (Default: 3, Recommended: 2-5)
-    - Higher values increase resilience on unreliable networks but may delay error detection.
-*   **Log Level**: Verbosity of the console output (DEBUG, INFO, WARNING, ERROR). 
-    - Set to **DEBUG** for troubleshooting connection issues or API errors.
-    - Use **INFO** for normal operation (recommended for production).
+## DeepSeek AI
 
----
+Only DeepSeek is supported, using OpenAI-compatible Chat Completions. AI setup asks for a key, model, base URL, mode and language.
 
-## Running Headless
+- `provider`: `deepseek`. Legacy `openai` / `custom` values are aliases for the same protocol.
+- `model`: defaults to `deepseek-chat`; other DeepSeek model names can be configured.
+- `api_key`: falls back to `DEEPSEEK_API_KEY`.
+- `base_url`: falls back to `DEEPSEEK_API_BASE`, then `https://api.deepseek.com`. Root, `/v1` and full `/chat/completions` endpoints are accepted, including private proxies.
+- Requests use Bearer authentication, messages and JSON output. Explicit rejection of `response_format` triggers one retry without it; other failures use the original-mail fallback.
 
-For servers or Docker environments without interactivity.
+Other provider protocols, cloud authentication, device login and local model loading are outside the supported scope.
 
-1.  Set up your configuration using the interactive wizard first.
-2.  Run with the `--headless` flag:
-    ```bash
-    python main.py --headless
-    ```
-    or specify a custom config file:
-    ```bash
-    python main.py --headless -c /path/to/my_config.json
-    ```
+Rotating logs are stored in `logs/mailbot.log` beside the configuration: 5 MiB per file, three backups. See [deployment](../zh/go-service.md).

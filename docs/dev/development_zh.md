@@ -1,31 +1,25 @@
-# 开发指南
+# 开发与验证
 
-## 本地 PyInstaller 打包与测试
+## 结构
 
-在推送到 GitHub Actions 之前，可以在本地构建单文件可执行程序来验证打包是否正确，尽早发现隐藏依赖或数据文件缺失等问题。
+`cmd/mailbot` 为交互式或 headless 入口，`cmd/package` 生成跨平台发布包。`internal/mailbot` 包含配置、交互、IMAP / MIME、SQLite 队列、Telegram、AI 协议适配、代理和日志。`deploy/mailbot.service` 用于 Linux 常驻运行。
 
-### 前置条件
+## 检查与构建
 
-```bash
-# 确保在项目根目录，且已激活 venv
-pip install pyinstaller
-pip install -r requirements.txt
+```sh
+gofmt -w cmd internal
+go vet ./...
+go test -race -timeout 60s ./...
+go test -cover ./...
+go run ./cmd/package --variant linux-x64 --tag dev
 ```
 
-### 构建完整二进制
+测试不使用生产配置、邮箱或密钥。本地测试服务覆盖 IMAP、Telegram / AI HTTP 以及 SOCKS4a / SOCKS5 / HTTP CONNECT。DeepSeek 真实账号、模型可用性和出站网络仍需部署验证。
 
-```bash
-.venv/bin/python -m PyInstaller --clean --onefile \
-    --additional-hooks-dir hooks \
-    --collect-all rich \
-    --hidden-import litellm \
-    --collect-data litellm \
-    --name MailBot main.py
-```
+## 支持范围
 
-可执行文件位于 `dist/MailBot`，运行：
+邮件读取、MIME 解析、Raw/Hybrid/Agent 模式、Telegram 命令和按钮、规则、配置向导、代理、持久化队列、独立重试与恢复由 Go 实现。AI 仅支持 DeepSeek 的 OpenAI 兼容 Chat Completions，默认模型 deepseek-chat；其他服务商、LiteLLM 全路由兼容、云认证和本地推理不属于支持范围。
 
-```bash
-./dist/MailBot --help
-./dist/MailBot --headless -c config.json
-```
+原版 Python 源码可从 Git 历史读取。当前测试验证邮件和 Telegram 可观察行为、AI JSON 解析、DeepSeek 请求协议、错误回退、代理和队列恢复；本地模拟接口不能证明线上长期稳定性。
+
+交付前运行上述全量检查，并用 cmd/package 构建四个平台。macOS 本机可运行版本输出与配置检查；其他平台交叉构建不等同于运行验证。

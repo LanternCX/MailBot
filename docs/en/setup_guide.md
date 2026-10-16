@@ -1,6 +1,6 @@
 # Setup Guide
 
-MailBot looks for `config.json` in the current working directory by default; pass `-c PATH` / `--config PATH` when launching if you want to point at a different location. The CLI menu or headless run will create the file automatically if it is missing.
+MailBot looks for `config.json` in the current working directory by default; pass `-c PATH` / `--config PATH` to use a different location. If it is missing, use the interactive menu to create it; headless mode requires an existing file. See the [README](../../README.md) for build and launch commands.
 
 ## Google/Gmail
 
@@ -36,7 +36,7 @@ You need a Telegram Bot Token to send messages and your User ID (Chat ID) to rec
 
 ## Proxy & Network
 
-If your IMAP provider or Telegram endpoint must be reached via a SOCKS/HTTP proxy, add a `proxy` block to your configuration or enable it through the menu's system settings. It supports:
+If your IMAP provider, Telegram or AI endpoint must be reached via a SOCKS/HTTP proxy, add a `proxy` block to your configuration or enable it through the menu's system settings. It supports:
 
 * `scheme`: `socks5`, `socks4`, or `http`
 * `host`/`port`: address of the proxy
@@ -56,7 +56,7 @@ If your IMAP provider or Telegram endpoint must be reached via a SOCKS/HTTP prox
 }
 ```
 
-With the proxy enabled MailBot automatically sets the `http(s)_proxy` environment variables and routes IMAP sockets through the proxy so all network traffic (IMAP fetching + Telegram API) obeys it. Use the CLI wizard's system settings if you prefer an interactive form.
+The proxy applies to IMAP, Telegram and AI with proxy-side destination DNS. It does not modify global sockets or environment variables. Use the CLI wizard's system settings if you prefer an interactive form.
 
 ## Other Email Providers
 

@@ -1,0 +1,27 @@
+[Unit]
+Description=MailBot IMAP to Telegram service
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=mailbot
+Group=mailbot
+WorkingDirectory=/var/lib/mailbot
+ExecStart=/usr/local/bin/mailbot --headless --config /etc/mailbot/config.json
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=90
+StateDirectory=mailbot
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mailbot /etc/mailbot
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

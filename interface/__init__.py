@@ -1,1 +1,0 @@
-"""MailBot CLI presentation layer."""

@@ -21,33 +21,47 @@ import (
 	"golang.org/x/net/html"
 )
 
-func (s *Service) pollAccount(ctx context.Context, a Account) error {
+func (s *Service) connectIMAP(ctx context.Context, a Account) (*client.Client, net.Conn, func(), error) {
 	conn, err := s.network.dial(ctx, "tcp", net.JoinHostPort(a.Host, fmt.Sprint(a.Port)))
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	defer conn.Close()
 	rawConn := conn
 	stop := context.AfterFunc(ctx, func() { rawConn.Close() })
-	defer stop()
+	cleanup := func() { stop(); rawConn.Close() }
+	success := false
+	defer func() {
+		if !success {
+			cleanup()
+		}
+	}()
 	conn.SetDeadline(time.Now().Add(s.timeout))
 	if a.SSL {
 		tc := tls.Client(conn, &tls.Config{ServerName: a.Host, MinVersion: tls.VersionTLS12})
 		if err = tc.HandshakeContext(ctx); err != nil {
-			return err
+			return nil, nil, nil, err
 		}
 		conn = tc
 	}
 	c, err := client.New(conn)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	defer c.Terminate()
 	c.Timeout = s.timeout
 	conn.SetDeadline(time.Time{})
 	if err = c.Login(a.Email, a.Password); err != nil {
-		return fmt.Errorf("IMAP login failed")
+		return nil, nil, nil, fmt.Errorf("IMAP login failed")
 	}
+	success = true
+	return c, conn, func() { c.Terminate(); cleanup() }, nil
+}
+
+func (s *Service) pollAccount(ctx context.Context, a Account) error {
+	c, _, closeClient, err := s.connectIMAP(ctx, a)
+	if err != nil {
+		return err
+	}
+	defer closeClient()
 	var folderErrors []error
 	for _, folder := range a.Folders {
 		if ctx.Err() != nil {
@@ -63,11 +77,126 @@ func (s *Service) pollAccount(ctx context.Context, a Account) error {
 	return errors.Join(folderErrors...)
 }
 
+func mailboxStatusKey(a Account) string {
+	if len(a.Folders) == 1 && a.Folders[0] != "INBOX" {
+		return a.Name + "/" + a.Folders[0]
+	}
+	return a.Name
+}
+
+// One connection per folder keeps all configured folders live at once.
+func (s *Service) watchFolder(ctx context.Context, a Account) error {
+	c, conn, closeClient, err := s.connectIMAP(ctx, a)
+	if err != nil {
+		return err
+	}
+	idle, err := c.Support("IDLE")
+	if err != nil {
+		closeClient()
+		return err
+	}
+	updates := make(chan client.Update, 64)
+	c.Updates = updates
+	notify := make(chan struct{}, 1)
+	drainCtx, cancelDrain := context.WithCancel(context.Background())
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-drainCtx.Done():
+				return
+			case update := <-updates:
+				if _, ok := update.(*client.MailboxUpdate); ok {
+					select {
+					case notify <- struct{}{}:
+					default:
+					}
+				}
+			}
+		}
+	}()
+	defer func() { closeClient(); cancelDrain(); <-drained }()
+	folder := a.Folders[0]
+	slog.Info("mailbox watcher connected", "account", a.Name, "folder", folder, "idle", idle)
+	if _, err = c.Select(folder, !s.config.MarkSeen); err != nil {
+		return err
+	}
+	for ctx.Err() == nil {
+		// Coalesce updates before scanning, retaining any notification arriving
+		// during a scan so a message cannot fall into the scan/IDLE gap.
+		select {
+		case <-notify:
+		default:
+		}
+		if err = s.pollSelectedFolder(c, a, folder, c.Mailbox()); err != nil {
+			return err
+		}
+		s.mu.Lock()
+		s.status[mailboxStatusKey(a)] = "ok"
+		s.lastPoll[mailboxStatusKey(a)] = time.Now()
+		s.mu.Unlock()
+		if idle {
+			interval := min(time.Minute, time.Duration(s.config.PollInterval)*time.Second)
+			if err = s.idleMailbox(ctx, c, notify, interval); err != nil {
+				return err
+			}
+		} else {
+			// go-imap leaves the last command deadline on the socket. Remove it
+			// while waiting; the next command installs its own bounded deadline.
+			if err = conn.SetDeadline(time.Time{}); err != nil {
+				return err
+			}
+			if !wait(ctx, time.Duration(s.config.PollInterval)*time.Second) {
+				return ctx.Err()
+			}
+		}
+	}
+	return ctx.Err()
+}
+
+// Periodic scans recover missed notifications and renew IDLE well before the
+// server's inactivity limit. DONE is bounded even when a server stops replying.
+func (s *Service) idleMailbox(ctx context.Context, c *client.Client, notify <-chan struct{}, interval time.Duration) error {
+	c.Timeout = interval + s.timeout
+	stop := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- c.Idle(stop, &client.IdleOptions{LogoutTimeout: -1, PollInterval: -1}) }()
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		close(stop)
+		c.Timeout = s.timeout
+		return err
+	case <-ctx.Done():
+	case <-notify:
+	case <-timer.C:
+	}
+	close(stop)
+	deadline := time.NewTimer(s.timeout)
+	defer deadline.Stop()
+	select {
+	case err := <-done:
+		c.Timeout = s.timeout
+		return err
+	case <-deadline.C:
+		c.Terminate()
+		<-done
+		c.Timeout = s.timeout
+		return fmt.Errorf("IMAP IDLE did not stop before deadline")
+	}
+}
+
 func (s *Service) pollFolder(c *client.Client, a Account, folder string) error {
 	mb, err := c.Select(folder, !s.config.MarkSeen)
 	if err != nil {
 		return err
 	}
+	return s.pollSelectedFolder(c, a, folder, mb)
+}
+
+func (s *Service) pollSelectedFolder(c *client.Client, a Account, folder string, mb *imap.MailboxStatus) error {
 	account := accountID(a)
 	validity, uid, exists, err := s.store.Cursor(account, folder)
 	if err != nil {

@@ -6,7 +6,8 @@ MailBot forwards new messages from multiple IMAP mailboxes to Telegram, with opt
 
 ## Features
 
-- Independent polling, timeouts and reconnection for each account; folders within an account are checked in sequence.
+- IMAP IDLE watches each account and folder on its own connection, with reconnect catch-up and polling fallback.
+- Locally recognized verification emails bypass AI and send their full text through a separate delivery worker, sharing Telegram rate limits.
 - **Raw:** 50-character preview. **Hybrid:** short/code messages use a preview; long messages offer on-demand summary, original and conditional translation. **Agent:** automatic summary with original and translation controls.
 - Telegram settings submenus, conversational rule management, and reply-based `/ai` analysis.
 - Interactive account, bot, AI and proxy setup, including IMAP and Telegram connection tests.

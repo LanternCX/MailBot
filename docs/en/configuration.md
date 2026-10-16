@@ -10,6 +10,10 @@ The menu provides **Start Service** (Ctrl+C returns to the menu), **Config Wizar
 
 ## Processing and commands
 
+Each configured folder uses a separate IMAP connection. When the server supports IDLE, new-mail notifications trigger a UID scan immediately; a safety scan at the shorter of `poll_interval` and one minute recovers missed notifications. Otherwise the connection polls at `poll_interval`. Reconnection resumes from durable checkpoints. Delivery latency also depends on the mail provider, network and Telegram; no fixed latency is guaranteed.
+
+In every mode, locally recognized verification emails send their full text without AI. Recognition checks the subject and first 4,000 body characters for common verification-code phrases; it can miss unfamiliar wording or match unrelated mail. A separate worker prevents ordinary AI analysis from blocking these messages. Workers share Telegram cooldowns; an ongoing send or rate limit can still delay delivery. Message-size and unread-only settings still apply.
+
 Raw sends metadata and a 50-character preview without AI. Hybrid skips AI controls for short/code/login messages; other previews have Summary, Original and conditional Translate controls. Agent generates summaries automatically. AI failures fall back to a preview with an Original control. Analysis uses up to 2,000 body characters with a 30-second timeout and at most two simultaneous calls.
 
 `/settings` and `/mode` open the settings dashboard with language/mode submenus, Back and Close. `/rules` lists preferences with Add/Delete/Close buttons. `/rules add` and `/rules delete` prompt for the next message; `/rules` cancels. Direct `/rules add TEXT`, `/rules delete NUMBER` and `/rules clear` also work. Reply to text with `/ai`; the result replies to the referenced message. `/help`, `/start`, `/status`, `/mode raw|hybrid|agent` and `/language auto|zh|en|ja` are available.
@@ -23,7 +27,7 @@ See `config.example.json` at the repository root. Config and SQLite contain secr
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| poll_interval | 60 | Poll seconds, minimum 10 |
+| poll_interval | 60 | Poll seconds without IDLE; also bounds the IDLE safety-scan interval, minimum 10 |
 | max_retries | 3 | Fast retries before continued periodic reconnection |
 | log_level | INFO | DEBUG, INFO, WARNING, ERROR, CRITICAL |
 | network_timeout | 30 | IMAP operation and proxy handshake seconds |

@@ -380,11 +380,16 @@ func (s *Service) Status() string {
 		if !a.Enabled {
 			continue
 		}
-		last := "never"
-		if v := s.lastPoll[a.Name]; !v.IsZero() {
-			last = v.Format(time.RFC3339)
+		for _, folder := range a.Folders {
+			mailbox := a
+			mailbox.Folders = []string{folder}
+			key := mailboxStatusKey(mailbox)
+			last := "never"
+			if v := s.lastPoll[key]; !v.IsZero() {
+				last = v.Format(time.RFC3339)
+			}
+			text += fmt.Sprintf("\n%s: %s · last successful check: %s", key, s.status[key], last)
 		}
-		text += fmt.Sprintf("\n%s: %s · last successful poll: %s", a.Name, s.status[a.Name], last)
 	}
 	for i, t := range s.telegrams {
 		last := "never"

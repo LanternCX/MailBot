@@ -15,23 +15,24 @@ import (
 )
 
 type Service struct {
-	config       Config
-	configDir    string
-	configPath   string
-	configMu     sync.Mutex
-	store        *Store
-	network      *Network
-	timeout      time.Duration
-	targets      []string
-	telegrams    []*Telegram
-	mu           sync.RWMutex
-	rulesMu      sync.Mutex
-	rulesPending map[string]string
-	status       map[string]string
-	lastPoll     map[string]time.Time
-	lastSend     map[string]time.Time
-	aiSlots      chan struct{}
-	lock         *flock.Flock
+	config        Config
+	configDir     string
+	configPath    string
+	configMu      sync.Mutex
+	store         *Store
+	network       *Network
+	timeout       time.Duration
+	targets       []string
+	telegrams     []*Telegram
+	mu            sync.RWMutex
+	rulesMu       sync.Mutex
+	rulesPending  map[string]string
+	status        map[string]string
+	lastPoll      map[string]time.Time
+	lastSend      map[string]time.Time
+	aiSlots       chan struct{}
+	lock          *flock.Flock
+	deliveryLocks sync.Map
 }
 
 func NewService(c Config, configPath string) (*Service, error) {
@@ -122,10 +123,15 @@ func (s *Service) Run(ctx context.Context) error {
 		if !a.Enabled {
 			continue
 		}
-		start(func() { s.accountLoop(ctx, a) })
+		for _, folder := range a.Folders {
+			account := a
+			account.Folders = []string{folder}
+			start(func() { s.accountLoop(ctx, account) })
+		}
 	}
 	for _, t := range s.telegrams {
 		start(func() { s.deliveryLoop(ctx, t) })
+		start(func() { s.deliveryLane(ctx, t, true) })
 	}
 	// Telegram permits only one getUpdates consumer per bot token.
 	seen := map[string]bool{}
@@ -194,13 +200,13 @@ func (s *Service) initializeSettings() error {
 func (s *Service) accountLoop(ctx context.Context, a Account) {
 	failures := 0
 	for ctx.Err() == nil {
-		err := s.pollAccount(ctx, a)
+		err := s.watchFolder(ctx, a)
 		s.mu.Lock()
 		if err != nil {
-			s.status[a.Name] = "error"
+			s.status[mailboxStatusKey(a)] = "error"
 		} else {
-			s.status[a.Name] = "ok"
-			s.lastPoll[a.Name] = time.Now()
+			s.status[mailboxStatusKey(a)] = "ok"
+			s.lastPoll[mailboxStatusKey(a)] = time.Now()
 		}
 		s.mu.Unlock()
 		delay := time.Duration(s.config.PollInterval) * time.Second
@@ -229,8 +235,13 @@ func (s *Service) mode() string {
 }
 
 func (s *Service) deliveryLoop(ctx context.Context, t *Telegram) {
+	s.deliveryLane(ctx, t, false)
+}
+
+func (s *Service) deliveryLane(ctx context.Context, t *Telegram, priority bool) {
 	for ctx.Err() == nil {
-		d, err := s.store.Next(t.key)
+		changed := s.store.Changes()
+		d, err := s.store.NextLane(t.key, priority)
 		if err != nil {
 			slog.Error("queue read failed", "error", err)
 			if !wait(ctx, 5*time.Second) {
@@ -239,8 +250,14 @@ func (s *Service) deliveryLoop(ctx context.Context, t *Telegram) {
 			continue
 		}
 		if d == nil {
-			if !wait(ctx, time.Second) {
+			timer := time.NewTimer(time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
 				return
+			case <-changed:
+				timer.Stop()
+			case <-timer.C:
 			}
 			continue
 		}
@@ -293,10 +310,14 @@ func (s *Service) deliver(ctx context.Context, t *Telegram, d *Delivery) error {
 	if d.Text == "" {
 		card := Card{Text: rawText(d.Email)}
 		language := s.store.Setting("language", s.config.AI.Language)
-		if mode == "hybrid" {
+		urgent := verificationMail(d.Email)
+		if urgent {
+			card = originalCard(d.Email)
+		}
+		if mode == "hybrid" && !urgent {
 			card = hybridCard(d.Email, language)
 		}
-		if mode == "agent" {
+		if mode == "agent" && !urgent {
 			select {
 			case s.aiSlots <- struct{}{}:
 				a, err := s.analyze(ctx, d.Email)
@@ -324,7 +345,7 @@ func (s *Service) deliver(ctx context.Context, t *Telegram, d *Delivery) error {
 		if i < len(parts)-1 {
 			partCard.Buttons = nil
 		}
-		if err := t.sendPart(ctx, parts[i], partCard, 0); err != nil {
+		if err := s.sendDeliveryPart(ctx, t, d, parts[i], partCard); err != nil {
 			return err
 		}
 		if err := s.store.SavePart(d.ID, i+1); err != nil {
@@ -335,4 +356,37 @@ func (s *Service) deliver(ctx context.Context, t *Telegram, d *Delivery) error {
 		}
 	}
 	return nil
+}
+
+// Serialize only network sends, allowing urgent mail through while normal
+// mail is waiting for AI. Both lanes observe the same durable target cooldown.
+func (s *Service) sendDeliveryPart(ctx context.Context, t *Telegram, d *Delivery, text string, card Card) error {
+	value, _ := s.deliveryLocks.LoadOrStore(t.key, &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+	delay, err := s.store.TargetDelay(t.key)
+	if err != nil {
+		return err
+	}
+	if delay > 0 && !wait(ctx, delay) {
+		return ctx.Err()
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err = t.sendPart(ctx, text, card, 0)
+	var api *APIError
+	if errors.As(err, &api) && api.Code == 429 {
+		delay := backoff(d.Attempts + 2)
+		if api.RetryAfter > 0 {
+			delay = time.Duration(api.RetryAfter) * time.Second
+		}
+		if checkpointErr := s.store.LimitTarget(t.key, delay); checkpointErr != nil {
+			// Still hold this target locally if its durable cooldown cannot be saved.
+			slog.Error("target cooldown save failed", "error", checkpointErr)
+			wait(ctx, delay)
+		}
+	}
+	return err
 }

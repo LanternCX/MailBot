@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -26,8 +27,10 @@ type Email struct {
 }
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db      *sql.DB
+	path    string
+	mu      sync.Mutex
+	changed chan struct{}
 }
 type Delivery struct {
 	ID       int64
@@ -35,6 +38,7 @@ type Delivery struct {
 	Attempts int
 	Part     int
 	Text     string
+	Priority bool
 }
 
 func OpenStore(path string) (*Store, error) {
@@ -73,7 +77,78 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, path: path}, nil
+	if err = migrateDeliveryPriority(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, path: path, changed: make(chan struct{})}, nil
+}
+
+// Upgrade existing queues without discarding pending mail or send progress.
+func migrateDeliveryPriority(db *sql.DB) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info('deliveries') WHERE name='priority'`)
+	if err != nil {
+		return err
+	}
+	exists := rows.Next()
+	err = rows.Err()
+	rows.Close()
+	if err != nil || exists {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`ALTER TABLE deliveries ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	rows, err = tx.Query(`SELECT id,data FROM emails WHERE id IN (SELECT email FROM deliveries WHERE done=0)`)
+	if err != nil {
+		return err
+	}
+	var urgent []string
+	for rows.Next() {
+		var id string
+		var data []byte
+		if err = rows.Scan(&id, &data); err != nil {
+			rows.Close()
+			return err
+		}
+		var e Email
+		if err = json.Unmarshal(data, &e); err != nil {
+			rows.Close()
+			return err
+		}
+		if verificationMail(e) {
+			urgent = append(urgent, id)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range urgent {
+		if _, err = tx.Exec(`UPDATE deliveries SET priority=1 WHERE email=? AND done=0`, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) Changes() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.changed
+}
+
+func (s *Store) notify() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	close(s.changed)
+	s.changed = make(chan struct{})
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -110,7 +185,7 @@ func (s *Store) Commit(account, folder string, validity, uid uint32, emails []Em
 			return err
 		}
 		for _, target := range targets {
-			if _, err = tx.Exec(`INSERT OR IGNORE INTO deliveries(email,target) VALUES(?,?)`, e.ID, target); err != nil {
+			if _, err = tx.Exec(`INSERT OR IGNORE INTO deliveries(email,target,priority) VALUES(?,?,?)`, e.ID, target, verificationMail(e)); err != nil {
 				return err
 			}
 		}
@@ -118,13 +193,32 @@ func (s *Store) Commit(account, folder string, validity, uid uint32, emails []Em
 	if _, err = tx.Exec(`INSERT INTO cursors VALUES(?,?,?,?) ON CONFLICT(account,folder) DO UPDATE SET validity=excluded.validity,uid=excluded.uid`, account, folder, validity, uid); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.notify()
+	return nil
 }
 func (s *Store) Next(target string) (*Delivery, error) {
+	return s.next(target, nil)
+}
+
+func (s *Store) NextLane(target string, priority bool) (*Delivery, error) {
+	return s.next(target, &priority)
+}
+
+func (s *Store) next(target string, priority *bool) (*Delivery, error) {
 	var d Delivery
 	var data []byte
 	now := time.Now().Unix()
-	err := s.db.QueryRow(`SELECT d.id,e.data,d.attempts,d.part,d.text FROM deliveries d JOIN emails e ON e.id=d.email WHERE d.target=? AND d.done=0 AND d.next<=? AND NOT EXISTS (SELECT 1 FROM target_limits l WHERE l.target=d.target AND l.until>?) ORDER BY d.id LIMIT 1`, target, now, now).Scan(&d.ID, &data, &d.Attempts, &d.Part, &d.Text)
+	query := `SELECT d.id,e.data,d.attempts,d.part,d.text,d.priority FROM deliveries d JOIN emails e ON e.id=d.email WHERE d.target=? AND d.done=0 AND d.next<=? AND NOT EXISTS (SELECT 1 FROM target_limits l WHERE l.target=d.target AND l.until>?)`
+	args := []any{target, now, now}
+	if priority != nil {
+		query += ` AND d.priority=?`
+		args = append(args, *priority)
+	}
+	query += ` ORDER BY d.priority DESC,d.id LIMIT 1`
+	err := s.db.QueryRow(query, args...).Scan(&d.ID, &data, &d.Attempts, &d.Part, &d.Text, &d.Priority)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -133,6 +227,23 @@ func (s *Store) Next(target string) (*Delivery, error) {
 	}
 	err = json.Unmarshal(data, &d.Email)
 	return &d, err
+}
+
+func (s *Store) TargetDelay(target string) (time.Duration, error) {
+	var until int64
+	err := s.db.QueryRow(`SELECT until FROM target_limits WHERE target=?`, target).Scan(&until)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return time.Until(time.Unix(until, 0)), nil
+}
+
+func (s *Store) LimitTarget(target string, delay time.Duration) error {
+	_, err := s.db.Exec(`INSERT INTO target_limits(target,until) VALUES(?,?) ON CONFLICT(target) DO UPDATE SET until=MAX(target_limits.until,excluded.until)`, target, time.Now().Add(delay).Unix())
+	return err
 }
 func (s *Store) SaveText(id int64, text string) error {
 	_, err := s.db.Exec(`UPDATE deliveries SET text=? WHERE id=?`, text, id)

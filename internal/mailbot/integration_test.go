@@ -42,6 +42,9 @@ func TestCompleteServiceFetchQueuesRetriesAndDelivers(t *testing.T) {
 	}
 	imapServer := server.New(memory.New())
 	imapServer.AllowInsecureAuth = true
+	// The memory backend does not publish unsolicited new-mail updates.
+	// Exercise polling here; realtime_test covers IDLE notifications.
+	imapServer.Enable(&idleTestExtension{disabled: true})
 	go imapServer.Serve(listener)
 	defer imapServer.Close()
 	admin, err := client.Dial(listener.Addr().String())

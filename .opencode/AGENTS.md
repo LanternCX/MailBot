@@ -1,32 +1,30 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `main.py` is the CLI entry point and service launcher.
-- `core/` holds the runtime engine: models, manager, fetcher, parser, AI logic, bot handlers, rules, and `notifiers/`.
-- `interface/` contains the Rich-based menu and configuration wizards.
-- `utils/` provides shared helpers and logging (`utils/logger.py`).
+- `cmd/mailbot/` is the CLI entry point and service launcher.
+- `internal/mailbot/` contains configuration, CLI dialogs, IMAP/MIME, the SQLite queue, Telegram, AI providers, proxy networking, and logging.
+- `cmd/package/` builds release archives; `deploy/` contains the systemd unit.
 - `docs/` includes setup and configuration guides; images live under `docs/img/`.
-- `test/` contains smoke and integration tests.
-- `scripts/` includes release tooling like `scripts/package.py`.
-- `hooks/` stores build hooks; `logs/` is generated at runtime.
+- Tests live beside Go source as `*_test.go` and use local protocol servers.
+- `logs/` is generated beside the active configuration file at runtime.
 
 ## Build, Test, and Development Commands
-- `python -m venv .venv && source .venv/bin/activate`
-- `pip install -r requirements.txt`
-- `python main.py` runs MailBot from source.
-- `python scripts/package.py --clean --variant macos-arm64` builds a PyInstaller bundle (requires PyInstaller installed).
+- Use Go 1.26 or newer; runtime builds have no Python or CGO dependency.
+- `go run ./cmd/mailbot` opens the interactive menu.
+- `go run ./cmd/mailbot --headless -c config.json` starts the service.
+- `go run ./cmd/package --clean --variant macos-arm64 --tag dev` builds a release archive.
 
 ## Coding Style & Naming Conventions
-- Target Python 3.10+ with `from __future__ import annotations` in modules.
-- Use type hints and concise docstrings; keep functions single-purpose.
-- Use module loggers like `logging.getLogger("mailbot.<module>")`; avoid `print` except CLI prompts.
+- Use Go types, context cancellation, and explicit error handling; keep functions single-purpose.
+- Format with `gofmt`; use `log/slog` outside CLI prompts.
+- Persist delivery state before advancing IMAP checkpoints or marking messages read.
+- Route network operations through the shared network implementation; keep deadlines and proxy-side DNS intact.
 - Keep user-facing text in English and avoid logging secrets.
 
 ## Testing Guidelines
-- Tests live under `test/` and use `unittest` (some commands use `pytest`).
-- `python -m unittest test.test_litellm_proxy` runs the proxy smoke test (requires valid `config.json` and API keys).
-- `python -m pytest test/test_proxy_double_proxy.py -v` runs the socket-proxy regression test.
-- `python test/smoketest_litellm.py` verifies PyInstaller bundle imports.
+- `go test -race -timeout 60s ./...` runs unit, protocol, CLI, and integration tests without production credentials.
+- `go vet ./...` checks static issues.
+- Keep coverage focused on user-visible behavior, recovery, and protocol compatibility. See `docs/dev/development_zh.md` for the feature-to-test mapping.
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits as seen in history: `feat:`, `fix:`, `docs:`.

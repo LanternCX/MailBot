@@ -2,6 +2,10 @@
   "poll_interval": 60,
   "max_retries": 3,
   "log_level": "INFO",
+  "state_path": "mailbot.sqlite3",
+  "network_timeout": 30,
+  "unread_only": true,
+  "mark_seen": true,
   "accounts": [
     {
       "name": "Gmail Work",
@@ -40,9 +44,9 @@
   ],
   "ai": {
     "enabled": false,
-    "provider": "openai",
+    "provider": "deepseek",
     "api_key": "sk-your-api-key",
-    "model": "gpt-4o-mini",
+    "model": "deepseek-chat",
     "base_url": null,
     "default_mode": "hybrid",
     "language": "auto"

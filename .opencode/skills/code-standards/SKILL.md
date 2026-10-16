@@ -1,6 +1,6 @@
 ---
 name: code-standards
-description: Use when implementing or reviewing MailBot Python changes that must follow project-specific architecture, callback, and logging conventions.
+description: Use when implementing or reviewing MailBot Go changes that must follow project-specific architecture, callback, persistence, and logging conventions.
 ---
 
 # Purpose
@@ -11,18 +11,19 @@ Keep MailBot code aligned with project architecture boundaries and runtime conve
 - This skill only defines MailBot-specific coding constraints.
 
 # Project-Specific Rules
-- Target Python 3.10+ with `from __future__ import annotations`.
-- Keep module boundaries stable (`core/`, `interface/`, `utils/`) with high cohesion and low coupling.
-- Use module-level loggers (`logging.getLogger("mailbot.<module>")`); do not log secrets.
-- Keep callback handler signatures compatible with existing convention: `_cb_<action>(cq_id, data, chat_id, message_id)`.
-- Use descriptive callback prefixes (for example `summ_`, `trans_`, `orig_`) and keep `_email_snapshot_cache` behavior compatible.
-- Prefer `AppConfig` / `AccountConfig` models over ad-hoc dict schema changes.
+- Target the Go version in `go.mod` and format with `gofmt`.
+- Keep entrypoints in `cmd/` and runtime behavior in `internal/mailbot/`.
+- Use `log/slog`; do not log secrets or email bodies.
+- Keep Telegram callback prefixes (`summ_`, `trans_`, `orig_`, `settings_`, `lang_`, `mode_`, `rules_`) compatible; bind cached emails to their allowed target.
+- Use typed `Config` / `Account` values and preserve unrelated JSON fields when persisting runtime settings.
+- Commit delivery jobs and IMAP checkpoints together before marking mail read. Keep per-target delivery and multipart progress durable.
+- Use shared network transports with bounded operations and context cancellation; do not mutate global sockets or environment proxies.
 - Preserve CLI/menu behavior unless explicitly approved.
 
 # Review Checklist
 - Interface/factory integration stays compatible with existing notifier/fetcher flow.
 - Retry/timeout behavior remains bounded and uses shared settings.
-- Threading/state transitions preserve existing safety assumptions.
+- Goroutines, state transitions, and shutdown preserve cancellation and race safety.
 - User-facing text, prompts, and bot messages remain English unless explicitly requested.
 
 # Deliverables

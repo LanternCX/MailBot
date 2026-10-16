@@ -1,104 +1,78 @@
 # 配置与使用
 
-MailBot 提供交互式 CLI 菜单引导你完成设置。
+默认读取当前工作目录的 `config.json`，也可用 `-c PATH` / `--config PATH` 指定。无参数启动打开交互菜单；服务器使用 `--headless`。配置文件不存在时，可直接使用菜单创建配置。`--check` 校验文件而不连接网络、创建数据库或日志。
 
-## 菜单选项
+## 交互菜单
 
-**主菜单：**
-1.  **Start Service (启动服务)**：启动 IMAP 监听。日志将实时显示在控制台中。
-2.  **Config Wizard (配置向导)**：添加或删除邮箱账户。
-3.  **Bot Settings (机器人设置)**：管理你的 Telegram Bot 配置。
-4.  **AI Settings (AI 设置)**：管理 AI 模型、API Key 和行为规则。
-5.  **System Settings (系统设置)**：高级配置 (轮询频率、重试次数、日志级别)。
-6.  **Test Connection (测试连接)**：验证你的 Telegram 设置是否生效。
-7.  **Exit (退出)**：退出程序。
+输入菜单编号或完整选项名，Enter 使用提示中的默认值。`:cancel` 放弃当前对话，EOF 退出。真实终端中的密码和令牌输入不回显；已保存的密钥不会打印出来。
 
----
+| 菜单 | 功能 |
+| --- | --- |
+| Start Service | 启动，Ctrl+C 停止并返回菜单 |
+| Config Wizard | 查看、添加、删除账号；Gmail / Outlook / QQ / 163 预设或自定义 IMAP；可立即验证登录 |
+| Bot Settings | 配置或删除 Telegram bot、chat_id 和 API 地址 |
+| AI Settings | 开关 DeepSeek AI，设置模型、密钥、地址、模式和语言 |
+| System Settings | 轮询间隔、重试次数、日志级别、代理 |
+| Test Connection | 验证 Telegram bot，可发送测试预览 |
 
-## 详细设置
+配置修改在完成对话后保存；取消不保存部分输入。
 
-### 1. Config Wizard (配置向导)
+## 邮件模式与 Telegram
 
-在此添加或管理你的 IMAP 账户。你需要：
-*   **Provider (服务商)**：如 Gmail (需使用应用专用密码)、Outlook 等。
-*   **Email Address (邮箱地址)**：完整的邮箱地址。
-*   **Password (密码)**：你的 **App Password (应用专用密码)** (而非登录账号密码)。
-*   **IMAP Settings (IMAP 设置)**：通常可以自动检测。
+Raw 发送发件人、标题、时间、50 字正文预览和网页链接，不调用 AI。
 
-### 2. Bot Settings (机器人设置)
+Hybrid 对少于 100 字或前 300 字包含验证码、登录等模式的邮件直接发送预览；其他邮件提供摘要、原文和翻译按钮。原文不消耗 AI 调用。翻译按钮依据简单语言检测与目标语言比较显示。
 
-配置你的 Telegram 通知渠道。首先需要启动你的机器人：
-1.  在 Telegram 中搜索并打开你的机器人，发送 `/start` 来启动对话。
-2.  然后在 MailBot 菜单中配置以下信息：
-    *   **Bot Token (机器人令牌)**：来自 BotFather 的 HTTP API Token。
-    *   **Chat ID (用户 ID)**：你的 Telegram 用户 ID（可通过 @userinfobot 获取）。
+Agent 自动生成摘要、类别、优先级和提取出的验证码，提供原文和条件翻译按钮。AI 失败时发送预览并保留原文入口，不阻塞收信。每次 AI 请求最多使用前 2,000 个正文字符，超时为 30 秒，全局并发上限为两个。
 
-### 3. AI Settings (AI 设置)
+| 命令 | 用法 |
+| --- | --- |
+| `/settings`、`/mode` | 打开设置面板，进入语言或模式子菜单，可返回或关闭；也支持 `/mode raw|hybrid|agent` |
+| `/rules` | 查看编号规则，使用 Add / Delete 按钮，或 `/rules add`、`/rules delete` 进入下一条消息输入；再次 `/rules` 取消 |
+| `/rules add TEXT`、`/rules delete NUMBER`、`/rules clear` | 直接管理规则 |
+| `/ai` | 回复一条有文本的消息进行分析，结果回复到原消息 |
+| `/help`、`/start` | 帮助 |
+| `/status` | 待投递数量、各账号最近成功轮询、各目标最近成功发送 |
+| `/language auto|zh|en|ja` | 设置语言的快捷命令 |
 
-通过 LiteLLM 的双级菜单配置 AI 分析。
-*   **Enable/Disable (开关)**：开启或关闭 AI 分析。
-*   **Provider Group → Platform (分组 → 平台)**：先选分组再选具体平台。预设覆盖 OpenAI/OpenRouter/Together/Fireworks，Anthropic/Gemini/Mistral/Groq，DeepSeek/Qwen/Moonshot/Minimax，Perplexity/Cohere，以及 Ollama 与自定义 OpenAI 兼容端点。
-*   **API Key**：仅在所选平台需要时提示输入。
-*   **Model (模型)**：可覆盖菜单显示的默认模型名。
-*   **Base URL**：Ollama、OpenRouter、Together、Fireworks、自定义 OpenAI 兼容端点均可编辑。
-*   **Default Mode & Language (默认模式与语言)**：选择邮件处理模式：
-    - **Raw (极速模式)**：简单转发，无 AI 分析（零 Token 成本）
-    - **Hybrid (混合模式)**：邮件预览 + 按需 AI（**推荐给想省钱的用户**）
-      - 邮件预览 + 三个按钮：摘要、原文、翻译
-      - 摘要按钮：按需 AI 分析（仅点击时消耗 Token）
-      - 原文按钮：显示完整邮件（无成本，使用缓存）
-      - 翻译按钮：仅在邮件语言与目标语言不同时显示（点击时消耗 Token）
-      - **节省对比**：相比智能模式，省 80-90% Token（不点击 AI 时）
-    - **Agent (智能模式)**：对每封邮件自动进行 AI 摘要（每封邮件消耗 Token）
-      - 每封邮件自动生成 AI 摘要
-      - 原文按钮：显示完整邮件（无成本）
-      - 翻译按钮：手动翻译（点击时消耗 Token）
-    
-    同时选择输出语言 (自动检测，或指定特定语言)。
+设置按钮原地更新面板，摘要、翻译、原文作为回复发送。语言和模式写回实际使用的 JSON 文件，并同步到数据库；停机后手动编辑 JSON 会在下次启动生效。关闭 AI 后默认使用 Raw。只有配置中允许的 chat_id 可操作；群组中的所有成员都能操作，请使用受信任的群组。
 
-### 4. Rules (规则系统)
+规则文件为配置文件旁的 `rules.md`，按编号顺序放入 AI 提示词。配置中的语言约束优先，其次是用户规则，再次是基础提示词。规则影响 AI 输出，不是确定性的邮件过滤器。
 
-MailBot 支持通过 Telegram 动态管理 AI 的行为规则，无需手动编辑文件。
-*   在 Telegram 中发送 `/rules` 可以查看当前生效的规则。
-*   跟随 Bot 的指引，通过自然语言对话来添加或删除规则。
-*   这些规则将保存到本地的 `rules.md` 中，并在 AI 处理邮件时生效。
+## JSON 字段
 
-*   **规则执行顺序**：规则按照在 `rules.md` 中出现的顺序依次执行。如果多个规则匹配同一封邮件，所有适用的规则都会按顺序执行。
-*   **规则优先级**：更具体的规则 (如同时匹配特定发件人和关键字) 应该放在通用规则之前，以避免冲突。
 
-例如：
-> "添加规则：忽略所有来自 no-reply@example.com 的邮件"
+完整结构见仓库根目录的 `config.example.json`。密钥以明文保存，程序写入配置使用 0600 权限。
 
-> "添加规则：遇到包含 '验证码' 的邮件，请提取验证码并加粗显示"
+| 字段 | 默认值 | 含义 |
+| --- | --- | --- |
+| `poll_interval` | `60` | 轮询秒数，至少 10 |
+| `max_retries` | `3` | 快速重试次数，失败后仍继续周期性重连 |
+| `log_level` | `INFO` | 控制台级别：DEBUG / INFO / WARNING / ERROR / CRITICAL |
+| `network_timeout` | `30` | IMAP 网络操作与代理握手超时秒数 |
+| `state_path` | `mailbot.sqlite3` | 数据库文件，相对路径以配置文件目录为准 |
+| `unread_only` | `true` | 只抓取新 UID 中仍未读的邮件；设 false 也补抓已被其他客户端读过的新邮件 |
+| `mark_seen` | `true` | 在待投递任务持久化成功后，将邮件标记为已读；false 保留邮箱未读状态 |
+| `max_message_bytes` | `0` | 默认不限制单封邮件大小；设置正整数后，超限邮件发送提示与原文入口 |
+| `accounts` | `[]` | name、email、password、imap_host、imap_port（993）、use_ssl（true）、folders（INBOX）、enabled（true）、web_url |
+| `notifiers` | `[]` | type=telegram、enabled；telegram 内为 bot_token、chat_id、api_base、timeout（30 秒） |
+| `proxy` | `null` | enabled（true）、scheme（socks5）、host、port、可选 username/password；支持 socks5、socks4a（配置值 socks4）、HTTP CONNECT |
+| `ai` | 禁用 | enabled、provider、api_key、model、base_url、default_mode（hybrid）、language（auto） |
 
-> "添加规则：标记包含项目截止日期的邮件为 ⚠️"
+`use_ssl: false` 保留普通 IMAP 连接行为，只应在你信任的网络中使用。代理配置同时用于 IMAP、Telegram 和 AI，目标域名由代理解析，不修改全局 socket 或代理环境变量。没有显式代理时直接连接。
 
-### 5. System Settings (系统设置)
+## DeepSeek AI
 
-自定义邮件获取器的行为。
-*   **Polling Interval (轮询间隔)**：检查新邮件的频率 (单位：秒)。(默认值：60s，最小值：10s)
-    - **建议**：
-      - **10-30s**：对于重要账户，需要立即获得通知 (如安全警报、紧急工作邮件)
-      - **60s**：平衡型设置，适合大多数用户。良好的收件箱监控。
-      - **300s 及以上 (5 分钟+)**：用于邮件量少的账户或希望减少 API 调用频率的场景。
-*   **Max Retries (最大重试次数)**：在放弃该抓取周期前，网络失败时的最大重试次数。(默认值：3，建议值：2-5)
-    - 更高的值能在不稳定网络上提高可靠性，但可能延迟错误检测。
-*   **Log Level (日志级别)**：控制台输出的日志级别 (DEBUG, INFO, WARNING, ERROR)。
-    - 设置为 **DEBUG** 以排查连接或 API 问题。
-    - 生产环境建议使用 **INFO** (正常操作)。
+只支持 DeepSeek，使用 OpenAI 兼容的 Chat Completions 协议。AI 设置无需选择平台，只需填写密钥、模型、地址、模式和语言。
 
----
+- `provider`：`deepseek`。旧 `openai` / `custom` 值仅作为同一协议的配置别名，不再选择其他服务商。
+- `model`：默认 `deepseek-chat`；可填写 DeepSeek 提供的其他模型名。
+- `api_key`：DeepSeek 密钥；为空时读取 `DEEPSEEK_API_KEY`。
+- `base_url`：默认 `https://api.deepseek.com`；为空时先读取 `DEEPSEEK_API_BASE`。可填写根地址、`/v1` 地址或完整 `/chat/completions` 接口，支持自有代理。
+- 请求使用 Bearer 鉴权、`messages` 和 JSON 输出格式。接口明确拒绝 `response_format` 时重试一次，不带该参数。其他错误使用原有 AI 失败回退。
 
-## Headless 模式运行
+不支持其他服务商专用协议、云平台认证、设备登录或本地模型加载。
 
-适用于服务器或 Docker 等无交互环境。
+## 日志与部署
 
-1.  首先使用交互式向导完成配置。
-2.  添加 `--headless` 标志运行：
-    ```bash
-    python main.py --headless
-    ```
-    或者指定自定义配置文件：
-    ```bash
-    python main.py --headless -c /path/to/my_config.json
-    ```
+日志位于配置目录下的 `logs/mailbot.log`，单文件 5 MiB、三个备份。Headless 使用 `--headless -c PATH`。部署见 [Go 服务](go-service.md)。

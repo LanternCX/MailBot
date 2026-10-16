@@ -12,12 +12,12 @@ Check whether repository-specific CI and release workflow behavior stays valid a
 
 # Scope
 - Workflows: `.github/workflows/*.yml`.
-- Dependencies: `requirements.txt` and related setup commands.
-- Packaging and entrypoints: `scripts/package.py`, `main.py`, hooks used by packaging.
+- Dependencies: `go.mod` and `go.sum`.
+- Packaging and entrypoints: `cmd/package`, `cmd/mailbot`, and release bundle contents.
 
 # Checks
 - Workflow triggers and job steps still match repository paths and scripts.
-- Python/tool version assumptions remain compatible with project baseline.
+- Go/tool version assumptions match `go.mod`; standalone builds use `CGO_ENABLED=0`.
 - Dependencies required by CI jobs are still installed at expected steps.
 - Artifact names and output paths are consistent with packaging scripts.
 - Logging/output in CI remains readable and not silently broken.

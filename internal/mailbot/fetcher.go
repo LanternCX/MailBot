@@ -368,6 +368,7 @@ func parseEmail(r io.Reader, e *Email) error {
 		}
 	}
 	e.Body = plain.String()
+	e.HTMLBody = rich.String()
 	if e.Body == "" {
 		e.Body = htmlText(rich.String())
 	}

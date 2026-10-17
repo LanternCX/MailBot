@@ -8,6 +8,16 @@ Choose by number or full option name. Enter accepts the displayed default; `:can
 
 The menu provides **Start Service** (Ctrl+C returns to the menu), **Config Wizard** (add/remove accounts and verify IMAP login), **Bot Settings** (set/remove bot), **AI Settings** (DeepSeek key, model, endpoint, mode and language), **System Settings** (polling, retries, console level and proxy), **Test Connection** (check Telegram and optionally send a test preview), and **Exit**. Cancelled dialogs do not save partial changes.
 
+## Short notifications and full mail reading
+
+Add `"reader": {"listen": "127.0.0.1:8080", "public_url": "https://mail.example.com"}` to the configuration. Point your HTTPS domain at a reverse proxy forwarding to that HTTP listener. For example, Caddy can serve `mail.example.com { reverse_proxy 127.0.0.1:8080 }`. The public URL must be an HTTPS origin without a path, credentials, query or fragment. Leave both fields empty to disable the reader.
+
+With the reader configured, newly prepared notifications use a short card and a full-body URL button, bypassing AI and its callback buttons. Locally detected numeric verification codes are highlighted for copying. Previously persisted delivery content keeps its existing progress and format. Without a reader, the modes below continue to apply.
+
+New mail stores both HTML and plain text. The reader sanitizes HTML and displays it in a sandboxed frame, preserving tables and supported inline styles. Remote images, CID images, attachments, scripts and forms are unavailable. Fixed-width messages may require horizontal scrolling within the body. Older mail uses stored plain text; historical HTML is not fetched again. Messages above `max_message_bytes` retain the existing size-limit notice and must be read in the original mailbox.
+
+Each mail has an unguessable persistent URL: anyone holding it can read the mail. Forwarding it shares access. No public mailbox listing is provided. Avoid logging full `/read/` paths in your reverse proxy. Links survive restarts with the SQLite database; completed mail expires 30 days after ingestion during periodic cleanup, while pending mail is retained. Removed or unknown mail shows an unavailable/expired message. Protect database backups as private mail and access credentials. Reader listener failures are logged and retried without stopping collection or delivery.
+
 ## Processing and commands
 
 Each configured folder uses a separate IMAP connection. When the server supports IDLE, new-mail notifications trigger a UID scan immediately; a safety scan at the shorter of `poll_interval` and one minute recovers missed notifications. Otherwise the connection polls at `poll_interval`. Reconnection resumes from durable checkpoints. Delivery latency also depends on the mail provider, network and Telegram; no fixed latency is guaranteed.

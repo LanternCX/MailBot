@@ -6,6 +6,10 @@
   "network_timeout": 30,
   "unread_only": true,
   "mark_seen": true,
+  "reader": {
+    "listen": "",
+    "public_url": ""
+  },
   "accounts": [
     {
       "name": "Gmail Work",

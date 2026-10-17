@@ -15,15 +15,16 @@ import (
 )
 
 type Email struct {
-	ID      string
-	Account string
-	Folder  string
-	UID     uint32
-	Subject string
-	Sender  string
-	Date    time.Time
-	Body    string
-	WebLink string
+	ID       string
+	Account  string
+	Folder   string
+	UID      uint32
+	Subject  string
+	Sender   string
+	Date     time.Time
+	Body     string
+	HTMLBody string
+	WebLink  string
 }
 
 type Store struct {
@@ -78,6 +79,10 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		return nil, err
 	}
 	if err = migrateDeliveryPriority(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS read_links (email TEXT PRIMARY KEY, token TEXT UNIQUE NOT NULL)`); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -323,5 +328,9 @@ func (s *Store) Cleanup() error {
 		return err
 	}
 	_, err = s.db.Exec(`DELETE FROM emails WHERE created<? AND id NOT IN (SELECT email FROM deliveries)`, time.Now().Add(-30*24*time.Hour).Unix())
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`DELETE FROM read_links WHERE email NOT IN (SELECT id FROM emails)`)
 	return err
 }

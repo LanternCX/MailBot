@@ -3,24 +3,52 @@ package mailbot
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
-	PollInterval    int        `json:"poll_interval"`
-	MaxRetries      int        `json:"max_retries"`
-	LogLevel        string     `json:"log_level"`
-	StatePath       string     `json:"state_path"`
-	NetworkTimeout  int        `json:"network_timeout"`
-	UnreadOnly      bool       `json:"unread_only"`
-	MarkSeen        bool       `json:"mark_seen"`
-	MaxMessageBytes int64      `json:"max_message_bytes,omitempty"`
-	Accounts        []Account  `json:"accounts"`
-	Notifiers       []Notifier `json:"notifiers"`
-	Proxy           *Proxy     `json:"proxy"`
-	AI              AIConfig   `json:"ai"`
+	PollInterval    int          `json:"poll_interval"`
+	MaxRetries      int          `json:"max_retries"`
+	LogLevel        string       `json:"log_level"`
+	StatePath       string       `json:"state_path"`
+	NetworkTimeout  int          `json:"network_timeout"`
+	UnreadOnly      bool         `json:"unread_only"`
+	MarkSeen        bool         `json:"mark_seen"`
+	MaxMessageBytes int64        `json:"max_message_bytes,omitempty"`
+	Accounts        []Account    `json:"accounts"`
+	Notifiers       []Notifier   `json:"notifiers"`
+	Proxy           *Proxy       `json:"proxy"`
+	AI              AIConfig     `json:"ai"`
+	Reader          ReaderConfig `json:"reader"`
+}
+
+type ReaderConfig struct {
+	Listen    string `json:"listen"`
+	PublicURL string `json:"public_url"`
+}
+
+func (r ReaderConfig) validate() error {
+	if r.PublicURL == "" && r.Listen == "" {
+		return nil
+	}
+	u, err := url.Parse(r.PublicURL)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.EscapedPath() != "" && u.EscapedPath() != "/") {
+		return fmt.Errorf("reader.public_url must be an HTTPS origin, e.g. https://mail.example.com")
+	}
+	_, port, err := net.SplitHostPort(r.Listen)
+	if err != nil {
+		return fmt.Errorf("reader.listen must be host:port")
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("reader.listen requires a port between 1 and 65535")
+	}
+	return nil
 }
 
 type Account struct {
@@ -114,6 +142,9 @@ func LoadConfig(path string) (Config, error) {
 		return c, err
 	}
 	if err = json.Unmarshal(b, &c); err != nil {
+		return c, err
+	}
+	if err = c.Reader.validate(); err != nil {
 		return c, err
 	}
 	if c.PollInterval < 10 || c.MaxRetries < 1 || c.NetworkTimeout < 1 || c.MaxMessageBytes < 0 {

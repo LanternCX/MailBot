@@ -13,9 +13,10 @@ import (
 )
 
 type Card struct {
-	Text    string     `json:"text"`
-	HTML    bool       `json:"html,omitempty"`
-	Buttons [][]button `json:"buttons,omitempty"`
+	DisablePreview bool       `json:"disable_preview,omitempty"`
+	Text           string     `json:"text"`
+	HTML           bool       `json:"html,omitempty"`
+	Buttons        [][]button `json:"buttons,omitempty"`
 }
 
 var codePattern = regexp.MustCompile(`(?i)(验证码|verification\s*code|登录|login|sign.?in|code\s*[:：])`)

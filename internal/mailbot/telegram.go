@@ -77,7 +77,7 @@ func (t *Telegram) send(ctx context.Context, text string, keyboard [][]button) e
 }
 
 func (t *Telegram) sendPart(ctx context.Context, text string, card Card, replyID int) error {
-	payload := map[string]any{"chat_id": t.config.ChatID, "text": text, "disable_web_page_preview": false}
+	payload := map[string]any{"chat_id": t.config.ChatID, "text": text, "disable_web_page_preview": card.DisablePreview}
 	if card.HTML {
 		payload["parse_mode"] = "HTML"
 	}

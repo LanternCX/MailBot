@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,9 @@ type Service struct {
 }
 
 func NewService(c Config, configPath string) (*Service, error) {
+	if err := c.Reader.validate(); err != nil {
+		return nil, err
+	}
 	enabled := 0
 	for _, n := range c.Notifiers {
 		if n.Enabled {
@@ -118,6 +122,9 @@ func (s *Service) Run(ctx context.Context) error {
 				cancel()
 			}
 		}()
+	}
+	if s.config.Reader.PublicURL != "" {
+		start(func() { s.readerLoop(ctx) })
 	}
 	for _, a := range s.config.Accounts {
 		if !a.Enabled {
@@ -307,6 +314,16 @@ func (s *Service) deliveryLane(ctx context.Context, t *Telegram, priority bool) 
 
 func (s *Service) deliver(ctx context.Context, t *Telegram, d *Delivery) error {
 	mode := s.mode()
+	if d.Text == "" && s.config.Reader.PublicURL != "" {
+		token, err := s.store.readingToken(d.Email.ID)
+		if err != nil {
+			return err
+		}
+		d.Text = encodeCard(readingCard(d.Email, strings.TrimRight(s.config.Reader.PublicURL, "/")+"/read/"+token))
+		if err := s.store.SaveText(d.ID, d.Text); err != nil {
+			return err
+		}
+	}
 	if d.Text == "" {
 		card := Card{Text: rawText(d.Email)}
 		language := s.store.Setting("language", s.config.AI.Language)

@@ -24,7 +24,14 @@ type Email struct {
 	Date     time.Time
 	Body     string
 	HTMLBody string
+	Images   []InlineImage `json:",omitempty"`
 	WebLink  string
+}
+
+type InlineImage struct {
+	CID  string
+	Type string
+	Data []byte
 }
 
 type Store struct {
@@ -83,6 +90,10 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		return nil, err
 	}
 	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS read_links (email TEXT PRIMARY KEY, token TEXT UNIQUE NOT NULL)`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS image_cache (key TEXT PRIMARY KEY, data BLOB NOT NULL, type TEXT NOT NULL, created INTEGER NOT NULL)`); err != nil {
 		db.Close()
 		return nil, err
 	}

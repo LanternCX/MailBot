@@ -346,11 +346,11 @@ func TestPromptAndAnalysisRetainLegacyConstraints(t *testing.T) {
 		}
 	}
 	a, err := parseAnalysis("```json\n{\"summary\":\"ok\"}\n```")
-	if err != nil || a.Priority != 3 || a.Category != "notification" {
+	if err != nil || a.Category != "notification" {
 		t.Fatal("analysis defaults differ")
 	}
-	if _, err = parseAnalysis(`{"priority":9}`); err == nil {
-		t.Fatal("invalid priority accepted")
+	if strings.Contains(prompt, "priority (integer") {
+		t.Fatal("prompt still requests mail priority")
 	}
 }
 

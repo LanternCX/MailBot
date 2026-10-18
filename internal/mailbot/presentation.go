@@ -130,18 +130,13 @@ func hybridCard(e Email, language string) Card {
 }
 
 var categoryIcons = map[string]string{"verification_code": "🔑", "notification": "📢", "billing": "💰", "promotion": "📣", "personal": "✉️"}
-var priorityLabels = map[int]string{1: "🔴 Urgent", 2: "🟠 High", 3: "🟡 Medium", 4: "🔵 Low", 5: "⚪ Lowest"}
 
 func summaryCard(a Analysis) Card {
 	icon := categoryIcons[a.Category]
 	if icon == "" {
 		icon = "📧"
 	}
-	priority := priorityLabels[a.Priority]
-	if priority == "" {
-		priority = priorityLabels[3]
-	}
-	text := fmt.Sprintf("🤖 <b>AI Summary</b>  %s %s  |  %s\n💡 %s", icon, html.EscapeString(a.Category), priority, html.EscapeString(a.Summary))
+	text := fmt.Sprintf("🤖 <b>AI Summary</b>  %s %s\n💡 %s", icon, html.EscapeString(a.Category), html.EscapeString(a.Summary))
 	if a.Code != nil && *a.Code != "" {
 		text += "\n🔑 Code: <code>" + html.EscapeString(*a.Code) + "</code>"
 	}
@@ -154,7 +149,12 @@ func originalCard(e Email) Card {
 		text += "\n🕐 Date: " + e.Date.Format("2006-01-02 15:04:05")
 	}
 	text += "\n\n📝 <b>Content:</b>\n" + html.EscapeString(e.Body) + webAnchor(e.WebLink)
-	return Card{Text: text, HTML: true}
+	card := Card{Text: text, HTML: true}
+	if code := verificationCode(e); code != "" {
+		card.Text = "验证码：<code>" + html.EscapeString(code) + "</code>\n\n" + card.Text
+		card.Buttons = [][]button{{{Text: "复制验证码", CopyText: &copyText{Text: code}}}}
+	}
+	return card
 }
 
 func manualAnalysisCard(a Analysis) Card {
@@ -162,11 +162,7 @@ func manualAnalysisCard(a Analysis) Card {
 	if icon == "" {
 		icon = "📧"
 	}
-	priority := priorityLabels[a.Priority]
-	if priority == "" {
-		priority = priorityLabels[3]
-	}
-	text := fmt.Sprintf("🤖 <b>AI Analysis</b>\n\n%s Category: <b>%s</b>\n📊 Priority: %s\n\n💡 Summary:\n%s", icon, html.EscapeString(a.Category), priority, html.EscapeString(a.Summary))
+	text := fmt.Sprintf("🤖 <b>AI Analysis</b>\n\n%s Category: <b>%s</b>\n\n💡 Summary:\n%s", icon, html.EscapeString(a.Category), html.EscapeString(a.Summary))
 	if a.Code != nil && *a.Code != "" {
 		text += "\n\n🔑 Code: <code>" + html.EscapeString(*a.Code) + "</code>"
 	}

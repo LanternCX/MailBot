@@ -10,11 +10,9 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/microcosm-cc/bluemonday"
 )
 
 // Reader failures must not stop durable mail collection or Telegram delivery.
@@ -49,28 +47,37 @@ func (s *Store) readingToken(id string) (string, error) {
 	return token, err
 }
 
-var readerPolicy = func() *bluemonday.Policy {
-	p := bluemonday.UGCPolicy()
-	p.AddTargetBlankToFullyQualifiedLinks(true)
-	// Email formatting is useful, but arbitrary CSS and resource URLs are not.
-	p.AllowStyles("color", "background-color", "font-size", "font-weight", "font-style", "text-align", "text-decoration", "line-height", "font-family", "padding", "margin", "border", "border-collapse", "width", "max-width").Globally()
-	return p
-}()
-
-const readerCSS = `html{color-scheme:light}body{margin:0;background:#f5f3ed;color:#242c28;font:17px/1.65 Georgia,"Noto Serif",serif}main{max-width:880px;margin:40px auto;padding:32px;background:#fff;border-top:4px solid #34725a;box-sizing:border-box}header{border-bottom:1px solid #e1e5df;margin-bottom:24px;padding-bottom:24px}small{font:12px/1.5 sans-serif;letter-spacing:.14em;color:#34725a}h1{font-size:clamp(24px,5vw,36px);line-height:1.3;overflow-wrap:anywhere;margin:16px 0}p{overflow-wrap:anywhere} .meta{font:14px/1.8 sans-serif;color:#59675e;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}iframe{display:block;width:100%;height:75vh;min-height:360px;border:0}footer{font:12px/1.7 sans-serif;color:#67746c;margin-top:24px}@media(max-width:600px){main{margin:0;padding:24px 16px;min-height:100vh}}`
+const readerCSS = `
+html{color-scheme:light;background:#fff}
+body{margin:0;color:#202124;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:860px;margin:0 auto;padding:36px 28px 24px;box-sizing:border-box}
+header{border-bottom:1px solid #eee;padding-bottom:20px;margin-bottom:20px}
+h1{font-size:24px;font-weight:600;line-height:1.4;letter-spacing:-.02em;overflow-wrap:anywhere;margin:0 0 12px}
+.sender{font-size:14px;overflow-wrap:anywhere}
+.meta{font-size:12px;color:#777;overflow-wrap:anywhere;margin-top:4px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:0}
+iframe{display:block;width:100%;height:75vh;min-height:80px;border:0}
+a{color:#555;text-underline-offset:3px}
+a:hover{color:#111}
+a:focus-visible{outline:2px solid #555;outline-offset:4px}
+footer{border-top:1px solid #eee;font-size:11px;color:#999;margin-top:32px;padding-top:12px}
+@media(max-width:600px){main{padding:20px 16px}header{padding-bottom:16px;margin-bottom:16px}h1{font-size:20px;line-height:1.45}}
+`
 
 // Only this exact app script may execute. The mail frame allows same-origin
 // measurement but never scripts, so long messages use the page's normal scroll.
-const readerResize = `const frame=document.querySelector('iframe');if(frame){frame.addEventListener('load',()=>{const body=frame.contentDocument.body;const resize=()=>{frame.style.height=Math.max(80,body.scrollHeight+24)+'px'};new ResizeObserver(resize).observe(body);resize()})}`
+const readerResize = `const frame=document.querySelector('iframe');if(frame){frame.addEventListener('load',()=>{const doc=frame.contentDocument;frame.style.height='80px';const resize=()=>{const height=Math.max(80,doc.body.scrollHeight,doc.documentElement.scrollHeight)+'px';if(frame.style.height!==height)frame.style.height=height};new ResizeObserver(resize).observe(doc.body);resize()})}`
 
 var readerScriptHash = func() string {
 	sum := sha256.Sum256([]byte(readerResize))
 	return base64.StdEncoding.EncodeToString(sum[:])
 }()
 
-var readerPage = template.Must(template.New("reader").Parse(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Subject}} · MailBot</title><style>` + readerCSS + `iframe{min-height:80px}</style></head><body><main><header><small>MAILBOT / 邮件正文</small><h1>{{.Subject}}</h1><div class="meta">{{.Sender}}<br>{{.Account}} · {{.Date.Format "2006-01-02 15:04"}}</div></header>{{if .HTMLBody}}<iframe title="邮件正文" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="{{.FrameURL}}"></iframe>{{else}}<pre>{{.Body}}</pre>{{end}}<footer>外部图片与附件不加载。此链接可直接访问邮件，请勿转发给无关人员。</footer></main><script>` + readerResize + `</script></body></html>`))
+var readerPage = template.Must(template.New("reader").Parse(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Subject}} · MailBot</title><style>` + readerCSS + `</style></head><body><main><header><h1>{{.Subject}}</h1><div class="sender">{{.Sender}}</div><div class="meta">{{.Account}}{{if not .Date.IsZero}} · {{.Date.Format "2006-01-02 15:04"}}{{end}}</div></header>{{if .HTMLBody}}<iframe title="邮件正文" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="{{.FrameURL}}"></iframe>{{else}}<pre>{{.Body}}</pre>{{end}}<footer>MailBot · 请勿转发此邮件的专属链接</footer></main><script>` + readerResize + `</script></body></html>`))
 
 func (s *Service) readerHandler() http.Handler {
+	client := newImageClient(s.config.Proxy)
+	downloads := make(chan struct{}, 4)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -81,11 +88,13 @@ func (s *Service) readerHandler() http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		path := strings.TrimPrefix(r.URL.Path, "/read/")
-		frame := strings.HasSuffix(path, "/body")
-		token := strings.TrimSuffix(path, "/body")
+		path := strings.Split(strings.TrimPrefix(r.URL.Path, "/read/"), "/")
+		token := path[0]
+		frame := len(path) == 2 && path[1] == "body"
+		image := len(path) == 3 && path[1] == "image"
+		remote := len(path) == 3 && path[1] == "remote"
 		var id string
-		if !strings.HasPrefix(r.URL.Path, "/read/") || len(token) != 64 {
+		if !strings.HasPrefix(r.URL.Path, "/read/") || len(token) != 64 || (len(path) != 1 && !frame && !image && !remote) {
 			http.Error(w, "邮件不存在或已过期。", http.StatusNotFound)
 			return
 		}
@@ -98,26 +107,62 @@ func (s *Service) readerHandler() http.Handler {
 			http.Error(w, "暂时无法读取邮件，请稍后再试。", http.StatusServiceUnavailable)
 			return
 		}
+		if remote {
+			raw := remoteImageSource(e, path[2])
+			if raw == "" {
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method == http.MethodHead {
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+			defer cancel()
+			select {
+			case downloads <- struct{}{}:
+				defer func() { <-downloads }()
+			case <-ctx.Done():
+				http.Error(w, "图片暂时无法加载。", http.StatusServiceUnavailable)
+				return
+			}
+			data, kind, err := s.store.remoteImage(ctx, client, raw)
+			if err != nil {
+				http.Error(w, "图片暂时无法加载。", http.StatusBadGateway)
+				return
+			}
+			w.Header().Set("Content-Type", kind)
+			_, _ = w.Write(data)
+			return
+		}
+		if image {
+			i, err := strconv.Atoi(path[2])
+			if err != nil || i < 0 || i >= len(e.Images) || !safeImageType(e.Images[i].Type) {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", e.Images[i].Type)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write(e.Images[i].Data)
+			}
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if r.Method == http.MethodHead {
 			return
 		}
 		if frame {
 			// A separate response avoids placing untrusted markup in the app page.
-			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox allow-same-origin allow-popups allow-popups-to-escape-sandbox; frame-ancestors 'self'; base-uri 'none'; form-action 'none'")
-			fmt.Fprint(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{display:flow-root;margin:0;font:16px/1.6 sans-serif;overflow-wrap:anywhere}table{max-width:100%}pre{white-space:pre-wrap}img{display:none}</style></head><body>`)
-			fmt.Fprint(w, readerPolicy.Sanitize(e.HTMLBody))
-			fmt.Fprint(w, `</body></html>`)
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox allow-same-origin allow-popups allow-popups-to-escape-sandbox; frame-ancestors 'self'; base-uri 'none'; form-action 'none'")
+			fmt.Fprint(w, renderMailHTML(e, token, true))
 			return
 		}
+		frameURL := "/read/" + token + "/body"
 		_ = readerPage.Execute(w, struct {
 			Email
 			FrameURL string
-		}{e, "/read/" + token + "/body"})
+		}{e, frameURL})
 	})
 }
-
-var verificationDigits = regexp.MustCompile(`(?i)(?:验证码|verification\s*code|security\s*code|one.time\s*code|code)[^0-9\n]{0,40}\b([0-9]{4,8})\b`)
 
 func readingCard(e Email, link string) Card {
 	preview := strings.Join(strings.Fields(e.Body), " ")
@@ -125,14 +170,17 @@ func readingCard(e Email, link string) Card {
 	if !e.Date.IsZero() {
 		text += " · " + e.Date.Format("01-02 15:04")
 	}
-	if verificationMail(e) {
-		if match := verificationDigits.FindStringSubmatch(truncate(e.Body, 1500)); len(match) > 1 {
-			text += "\n\n验证码：<code>" + match[1] + "</code>"
-		}
+	code := verificationCode(e)
+	if code != "" {
+		text += "\n\n验证码：<code>" + template.HTMLEscapeString(code) + "</code>"
 	}
 	text += "\n\n" + template.HTMLEscapeString(truncate(preview, 180))
 	if len([]rune(preview)) > 180 {
 		text += "…"
 	}
-	return Card{Text: text, HTML: true, DisablePreview: true, Buttons: [][]button{{{Text: "查看正文", URL: link}}}}
+	buttons := []button{{Text: "查看正文", URL: link}}
+	if code != "" {
+		buttons = append(buttons, button{Text: "复制验证码", CopyText: &copyText{Text: code}})
+	}
+	return Card{Text: text, HTML: true, DisablePreview: true, Buttons: [][]button{buttons}}
 }

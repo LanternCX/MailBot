@@ -24,9 +24,14 @@ type APIError struct {
 func (e *APIError) Error() string { return fmt.Sprintf("Telegram API status %d", e.Code) }
 
 type button struct {
+	Text     string    `json:"text"`
+	Data     string    `json:"callback_data,omitempty"`
+	URL      string    `json:"url,omitempty"`
+	CopyText *copyText `json:"copy_text,omitempty"`
+}
+
+type copyText struct {
 	Text string `json:"text"`
-	Data string `json:"callback_data,omitempty"`
-	URL  string `json:"url,omitempty"`
 }
 
 func (t *Telegram) call(ctx context.Context, method string, payload any, result any) error {

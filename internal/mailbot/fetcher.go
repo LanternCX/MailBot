@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -350,6 +351,18 @@ func parseEmail(r io.Reader, e *Email) error {
 			continue
 		}
 		kind, params, _ := h.ContentType()
+		cid := strings.Trim(h.Get("Content-ID"), "<> \t")
+		if cid != "" && strings.HasPrefix(kind, "image/") {
+			data, err := io.ReadAll(io.LimitReader(part.Body, 5<<20+1))
+			if err != nil {
+				return err
+			}
+			detected := http.DetectContentType(data)
+			if len(data) <= 5<<20 && safeImageType(detected) {
+				e.Images = append(e.Images, InlineImage{CID: cid, Type: detected, Data: data})
+			}
+			continue
+		}
 		_, disposition, _ := h.ContentDisposition()
 		if params["name"] != "" || disposition["filename"] != "" {
 			continue

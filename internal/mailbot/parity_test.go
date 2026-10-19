@@ -144,10 +144,10 @@ func TestSettingsDashboardNavigationAndJSONPersistence(t *testing.T) {
 	s, tg, r := parityService(t)
 	handle(t, s, tg, botMessage("/settings"))
 	c := findCall(t, r, "sendMessage")
-	if c.Payload["parse_mode"] != "HTML" || !strings.Contains(c.Payload["text"].(string), "MailBot Settings") {
+	if c.Payload["parse_mode"] != "HTML" || !strings.Contains(c.Payload["text"].(string), "MailBot · 设置") {
 		t.Fatal("missing settings dashboard")
 	}
-	for _, tc := range []struct{ data, contains string }{{"settings_lang", "Language Settings"}, {"settings_mode", "Operation Mode"}, {"settings_back", "MailBot Settings"}, {"lang_ja", "日本語"}, {"mode_agent", "agent"}} {
+	for _, tc := range []struct{ data, contains string }{{"settings_lang", "AI 主要语言"}, {"settings_mode", "MailBot · 设置"}, {"settings_back", "MailBot · 设置"}, {"lang_ja", "日本語"}, {"mode_agent", "自动概括"}} {
 		r.reset()
 		handle(t, s, tg, botCallback(tc.data))
 		c = findCall(t, r, "editMessageText")
@@ -159,7 +159,7 @@ func TestSettingsDashboardNavigationAndJSONPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.AI.Language != "ja" || cfg.AI.Mode != "agent" {
+	if cfg.AI.Language != "ja" || cfg.AI.Mode != "hybrid" {
 		t.Fatalf("settings not in JSON: %+v", cfg.AI)
 	}
 	r.reset()
@@ -171,22 +171,22 @@ func TestSettingsCallbacksAcknowledgeUnchangedAndFailedSaves(t *testing.T) {
 	s, tg, r := parityService(t)
 	// No configuration path: unchanged selections must not attempt to save.
 	s.configPath = ""
-	for _, data := range []string{"lang_zh", "mode_hybrid"} {
+	for _, data := range []string{"lang_zh"} {
 		r.reset()
 		handle(t, s, tg, botCallback(data))
 		calls := r.snapshot()
-		if len(calls) != 1 || calls[0].Method != "answerCallbackQuery" || !strings.HasPrefix(calls[0].Payload["text"].(string), "Already") {
+		if len(calls) != 1 || calls[0].Method != "answerCallbackQuery" || calls[0].Payload["text"] != s.tr("already") {
 			t.Fatalf("unchanged setting should only acknowledge: %+v", calls)
 		}
 	}
-	for _, data := range []string{"lang_ja", "mode_agent"} {
+	for _, data := range []string{"lang_ja"} {
 		r.reset()
 		err := s.handleUpdate(context.Background(), tg, botCallback(data), make(chan func(), 1))
 		if err == nil {
 			t.Fatal("save failure was ignored")
 		}
 		calls := r.snapshot()
-		if len(calls) != 1 || calls[0].Method != "answerCallbackQuery" || !strings.Contains(calls[0].Payload["text"].(string), "Unable to save") {
+		if len(calls) != 1 || calls[0].Method != "answerCallbackQuery" || calls[0].Payload["text"] != s.tr("save_error") {
 			t.Fatalf("save failure did not acknowledge callback: %+v", calls)
 		}
 	}
@@ -195,40 +195,40 @@ func TestSettingsCallbacksAcknowledgeUnchangedAndFailedSaves(t *testing.T) {
 	}
 }
 
-func TestRulesConversationButtonsCancellationAndPersistence(t *testing.T) {
+func TestRetiredRulesControlsDoNotModifyPreferences(t *testing.T) {
 	s, tg, r := parityService(t)
 	handle(t, s, tg, botMessage("/rules"))
 	c := findCall(t, r, "sendMessage")
-	if c.Payload["reply_markup"] == nil {
-		t.Fatal("missing rule controls")
+	if c.Payload["reply_markup"] != nil || !strings.Contains(c.Payload["text"].(string), "无需选择模式或设置规则") {
+		t.Fatal("retired rule controls still advertised")
 	}
 	handle(t, s, tg, botCallback("rules_add"))
 	handle(t, s, tg, botMessage("Summarize in detail"))
 	handle(t, s, tg, botMessage("/rules add"))
 	handle(t, s, tg, botMessage("Focus on invoices"))
 	rules, err := loadRules(filepath.Join(s.configDir, "rules.md"))
-	if err != nil || len(rules) != 2 {
-		t.Fatalf("rules missing: %v %v", rules, err)
+	if err != nil || len(rules) != 0 {
+		t.Fatalf("retired rules changed preferences: %v %v", rules, err)
 	}
 	handle(t, s, tg, botCallback("rules_delete"))
 	handle(t, s, tg, botMessage("delete number 1 please"))
 	rules, _ = loadRules(filepath.Join(s.configDir, "rules.md"))
-	if len(rules) != 1 || rules[0] != "Focus on invoices" {
-		t.Fatalf("delete failed: %v", rules)
+	if len(rules) != 0 {
+		t.Fatalf("retired rules changed preferences: %v", rules)
 	}
 	handle(t, s, tg, botMessage("/rules add"))
 	handle(t, s, tg, botMessage("/rules"))
 	handle(t, s, tg, botMessage("must not become a rule"))
 	rules, _ = loadRules(filepath.Join(s.configDir, "rules.md"))
-	if len(rules) != 1 {
-		t.Fatal("/rules did not cancel conversation")
+	if len(rules) != 0 {
+		t.Fatal("retired rules accepted chat text")
 	}
 	r.reset()
 	handle(t, s, tg, botCallback("rules_close"))
 	findCall(t, r, "deleteMessage")
 }
 
-func TestQueuedDeliveryPreservesLegacyModesAcrossRestart(t *testing.T) {
+func TestQueuedDeliverySummarizesRegardlessOfLegacyModeAcrossRestart(t *testing.T) {
 	for _, mode := range []string{"raw", "hybrid", "agent"} {
 		t.Run(mode, func(t *testing.T) {
 			s, tg, r := parityService(t)
@@ -263,17 +263,12 @@ func TestQueuedDeliveryPreservesLegacyModesAcrossRestart(t *testing.T) {
 					aiCalls++
 				}
 			}
-			if mode == "agent" {
-				if aiCalls != 1 || !strings.Contains(text, "Fixture summary") || !strings.Contains(text, "123456") {
-					t.Fatalf("automatic summary missing: %q, AI calls=%d", text, aiCalls)
-				}
-			} else if aiCalls != 0 || !strings.Contains(text, "Invoice") || !strings.Contains(text, "sender@example.org") {
-				t.Fatalf("preview or on-demand behavior differs: %q, AI calls=%d", text, aiCalls)
+			if aiCalls != 1 || !strings.Contains(text, "Fixture summary") || !strings.Contains(text, "Invoice") || !strings.Contains(text, "sender@example.org") {
+				t.Fatalf("automatic summary missing: %q, AI calls=%d", text, aiCalls)
 			}
 			markup, _ := json.Marshal(call.Payload["reply_markup"])
 			for _, action := range []string{"summ_", "orig_", "trans_"} {
-				want := mode != "raw" && (action != "summ_" || mode == "hybrid")
-				if strings.Contains(string(markup), action+e.ID) != want {
+				if strings.Contains(string(markup), action+e.ID) {
 					t.Fatalf("unexpected %s button in %s: %s", action, mode, markup)
 				}
 			}
@@ -326,14 +321,14 @@ func TestEmailCallbacksReplyAndManualAI(t *testing.T) {
 	jobs := handle(t, s, tg, u)
 	(<-jobs)()
 	c := findCall(t, r, "sendMessage")
-	if c.Payload["reply_to_message_id"] != float64(99) || !strings.Contains(c.Payload["text"].(string), "AI Analysis") {
+	if c.Payload["reply_to_message_id"] != float64(99) || !strings.Contains(c.Payload["text"].(string), "AI 分析") {
 		t.Fatal("manual AI reply differs")
 	}
 	findCall(t, r, "sendChatAction")
 	// Arbitrary text is not accepted in place of the original reply workflow.
 	r.reset()
 	handle(t, s, tg, botMessage("/ai some text"))
-	if len(r.snapshot()) != 1 || !strings.Contains(findCall(t, r, "sendMessage").Payload["text"].(string), "reply") {
+	if len(r.snapshot()) != 1 || !strings.Contains(findCall(t, r, "sendMessage").Payload["text"].(string), "请回复") {
 		t.Fatal("missing reply requirement")
 	}
 }
@@ -360,7 +355,7 @@ func TestCLIAccountBotAIAndSystemWizards(t *testing.T) {
 	script := strings.Join([]string{
 		"2", "1", "1", "Work", "user@example.org", "app-secret", "INBOX,News", "https://mail.example.org", "n",
 		"3", "1", "bot-secret", "42", "https://telegram.example.org",
-		"4", "y", "ai-secret", "deepseek-chat", "", "3", "2",
+		"4", "y", "1", "ai-secret", "n",
 		"5", "15", "4", "3", "y", "3", "proxy.example.org", "8080", "proxy-user", "proxy-secret",
 		"7", "",
 	}, "\n")
@@ -377,7 +372,7 @@ func TestCLIAccountBotAIAndSystemWizards(t *testing.T) {
 	if len(c.Notifiers) != 1 || c.Notifiers[0].Telegram.Token != "bot-secret" {
 		t.Fatal("bot setup failed")
 	}
-	if !c.AI.Enabled || c.AI.Provider != "deepseek" || c.AI.Mode != "agent" || c.AI.Language != "zh" {
+	if !c.AI.Enabled || c.AI.Provider != "deepseek" || c.AI.Mode != "" || c.AI.Language != "zh" {
 		t.Fatalf("AI setup failed: %+v", c.AI)
 	}
 	if c.PollInterval != 15 || c.MaxRetries != 4 || c.LogLevel != "WARNING" || c.Proxy == nil || c.Proxy.Scheme != "http" || c.Proxy.Password != "proxy-secret" {
@@ -579,7 +574,7 @@ func TestExpiredCallbackClearsKeyboardAndExplainsExpiration(t *testing.T) {
 	s, tg, r := parityService(t)
 	handle(t, s, tg, botCallback("orig_missing"))
 	c := findCall(t, r, "editMessageText")
-	if !strings.Contains(c.Payload["text"].(string), "expired") {
+	if !strings.Contains(c.Payload["text"].(string), "已过期") {
 		t.Fatal("missing expired-mail explanation")
 	}
 	markup := c.Payload["reply_markup"].(map[string]any)

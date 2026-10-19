@@ -1,4 +1,5 @@
 {
+	"ui_language": "zh",
   "poll_interval": 60,
   "max_retries": 3,
   "log_level": "INFO",
@@ -52,7 +53,6 @@
     "api_key": "sk-your-api-key",
     "model": "deepseek-chat",
     "base_url": null,
-    "default_mode": "hybrid",
-    "language": "auto"
+    "language": "zh"
   }
 }

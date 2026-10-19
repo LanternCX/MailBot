@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	UILanguage      string       `json:"ui_language,omitempty"`
 	PollInterval    int          `json:"poll_interval"`
 	MaxRetries      int          `json:"max_retries"`
 	LogLevel        string       `json:"log_level"`
@@ -131,7 +132,7 @@ type AIConfig struct {
 	APIKey   string `json:"api_key"`
 	Model    string `json:"model"`
 	BaseURL  string `json:"base_url"`
-	Mode     string `json:"default_mode"`
+	Mode     string `json:"default_mode,omitempty"` // Accepted for old configurations; automatic reading ignores it.
 	Language string `json:"language"`
 }
 
@@ -143,6 +144,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if err = json.Unmarshal(b, &c); err != nil {
 		return c, err
+	}
+	if c.UILanguage != "" && c.UILanguage != "zh" && c.UILanguage != "en" && c.UILanguage != "ja" {
+		return c, fmt.Errorf("ui_language must be zh, en or ja")
 	}
 	if err = c.Reader.validate(); err != nil {
 		return c, err
@@ -200,9 +204,6 @@ func LoadConfig(path string) (Config, error) {
 	default:
 		return c, fmt.Errorf("invalid log_level")
 	}
-	if c.AI.Mode != "raw" && c.AI.Mode != "hybrid" && c.AI.Mode != "agent" {
-		return c, fmt.Errorf("invalid AI mode")
-	}
 	if c.AI.Enabled {
 		if _, err := buildAIRequest(c.AI, "", ""); err != nil {
 			return c, err
@@ -221,7 +222,7 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func DefaultConfig() Config {
-	return Config{PollInterval: 60, MaxRetries: 3, LogLevel: "INFO", NetworkTimeout: 30, UnreadOnly: true, MarkSeen: true, StatePath: "mailbot.sqlite3", Accounts: []Account{}, Notifiers: []Notifier{}, AI: AIConfig{Provider: "deepseek", Model: "deepseek-chat", Mode: "hybrid", Language: "auto"}}
+	return Config{PollInterval: 60, MaxRetries: 3, LogLevel: "INFO", NetworkTimeout: 30, UnreadOnly: true, MarkSeen: true, StatePath: "mailbot.sqlite3", Accounts: []Account{}, Notifiers: []Notifier{}, AI: AIConfig{Provider: "deepseek", Model: "deepseek-chat", Language: "zh"}}
 }
 
 // SaveConfig atomically replaces configuration with owner-only permissions.
@@ -274,6 +275,13 @@ func UpdateAISettings(path string, values map[string]string) error {
 		ai = map[string]any{}
 	}
 	for key, value := range values {
+		if key == "ui_language" {
+			c[key], err = json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		ai[key] = value
 	}
 	c["ai"], err = json.Marshal(ai)

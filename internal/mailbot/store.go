@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		db.Close()
 		return nil, err
 	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS reading_ai (email TEXT NOT NULL, language TEXT NOT NULL, kind TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY(email,language,kind))`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db, path: path, changed: make(chan struct{})}, nil
 }
 
@@ -343,5 +347,9 @@ func (s *Store) Cleanup() error {
 		return err
 	}
 	_, err = s.db.Exec(`DELETE FROM read_links WHERE email NOT IN (SELECT id FROM emails)`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`DELETE FROM reading_ai WHERE email NOT IN (SELECT id FROM emails)`)
 	return err
 }

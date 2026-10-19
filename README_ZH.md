@@ -2,14 +2,14 @@
 
 [English](README.md) · [配置文档](docs/zh/configuration.md) · [邮箱与 Telegram 设置](docs/zh/setup_guide.md) · [服务部署](docs/zh/go-service.md)
 
-MailBot 将多个 IMAP 邮箱的新邮件转发到 Telegram，可按需生成摘要、提取验证码和翻译。程序使用 Go，运行时不需要 Python 或外部数据库。
+MailBot 将多个 IMAP 邮箱的新邮件转发到 Telegram，自动简短概括、提取验证码，并提供原邮件阅读和按需翻译。程序使用 Go，运行时不需要 Python 或外部数据库。
 
 ## 功能
 
 - 多账号、多文件夹独立使用 IMAP IDLE 实时监听，断线重连补抓，不支持时回退轮询。
 - 本地识别验证码邮件，跳过 AI、完整转发正文，独立发送任务与普通邮件共享 Telegram 限流。
-- Raw：50 字邮件预览；Hybrid：短邮件直接预览，长邮件提供按需摘要、原文和翻译；Agent：自动摘要与原文、翻译按钮。
-- Telegram 多级设置面板、规则的分步输入和 `/ai` 回复分析。
+- 按主要语言自动概括，网页保留原邮件 HTML 排版，点击翻译后缓存完整译文；AI 失败仍正常发送通知。
+- Telegram 可独立设置界面语言和 AI 主要语言；模型和接口地址放在高级设置，无需选择模式或维护规则。
 - 交互式账号、机器人、AI、代理配置，以及 IMAP / Telegram 连接测试。
 - 仅支持 DeepSeek AI，使用 OpenAI 兼容的 Chat Completions API。
 - SQLite 保存抓取进度和待发送任务，失败重试、重启恢复、分段发送；日志轮转和 systemd 服务管理。

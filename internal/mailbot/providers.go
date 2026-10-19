@@ -48,5 +48,5 @@ func buildAIRequest(c AIConfig, prompt, content string) (aiRequest, error) {
 	if key != "" {
 		headers.Set("Authorization", "Bearer "+key)
 	}
-	return aiRequest{Endpoint: base, Headers: headers, Protocol: "compatible", Payload: map[string]any{"model": model, "messages": []map[string]string{{"role": "system", "content": prompt}, {"role": "user", "content": content}}, "temperature": 0.3, "max_tokens": 800, "response_format": map[string]string{"type": "json_object"}}}, nil
+	return aiRequest{Endpoint: base, Headers: headers, Protocol: "compatible", Payload: map[string]any{"model": model, "messages": []map[string]string{{"role": "system", "content": prompt}, {"role": "user", "content": content}}, "temperature": 0.3, "max_tokens": 8192, "response_format": map[string]string{"type": "json_object"}}}, nil
 }

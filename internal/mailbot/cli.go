@@ -138,7 +138,7 @@ func RunMenu(ctx context.Context, path string, input io.Reader, out io.Writer) e
 		} else if !os.IsNotExist(err) {
 			fmt.Fprintf(out, "Configuration could not be loaded: %v\n", err)
 		}
-		choice, err := t.choice("Main Menu", []string{"Start Service", "Config Wizard", "Bot Settings", "AI Settings", "System Settings", "Test Connection", "Exit"}, 0)
+		choice, err := t.choice("Main Menu", []string{"Start Service", "Config Wizard", "Bot Settings", "AI Settings", "System Settings", "Test Connection", "Exit", "Interface Language"}, 0)
 		if err == io.EOF || choice == 6 && err == nil {
 			fmt.Fprintln(out, "Bye.")
 			return nil
@@ -180,6 +180,19 @@ func RunMenu(ctx context.Context, path string, input io.Reader, out io.Writer) e
 			err = t.system(&c)
 		case 5:
 			err = t.testConnection(ctx, c)
+		case 7:
+			languages := []string{"zh", "en", "ja"}
+			d := 0
+			for i, language := range languages {
+				if language == c.UILanguage {
+					d = i
+				}
+			}
+			var n int
+			n, err = t.choice("Telegram and web interface language", languages, d)
+			if err == nil {
+				c.UILanguage = languages[n]
+			}
 		}
 		if err == io.EOF {
 			return nil
@@ -192,7 +205,7 @@ func RunMenu(ctx context.Context, path string, input io.Reader, out io.Writer) e
 			fmt.Fprintf(out, "Error: %v\n", err)
 			continue
 		}
-		if choice >= 1 && choice <= 4 {
+		if choice >= 1 && choice <= 4 || choice == 7 {
 			if err = SaveConfig(path, c); err != nil {
 				fmt.Fprintf(out, "Save failed: %v\n", err)
 			} else {
@@ -333,56 +346,50 @@ func (t *terminal) bot(c *Config) error {
 }
 
 func (t *terminal) ai(c *Config) error {
-	enabled, err := t.yes("Enable AI analysis?", c.AI.Enabled)
+	enabled, err := t.yes("Enable automatic summaries and translation?", c.AI.Enabled)
 	if err != nil {
 		return err
 	}
 	if !enabled {
-		c.AI = DefaultConfig().AI
+		c.AI.Enabled = false
+		c.AI.Mode = ""
 		return nil
 	}
 	a := c.AI
 	a.Enabled = true
-	a.Provider = "deepseek"
-	if c.AI.Provider != "deepseek" {
-		a.Model = "deepseek-chat"
-		a.BaseURL = ""
-		a.APIKey = ""
-	}
-	fmt.Fprintln(t.out, "AI provider: DeepSeek (OpenAI-compatible API)")
-	if a.APIKey, err = t.ask("DeepSeek API Key", a.APIKey, true); err != nil {
-		return err
-	}
-	if a.Model, err = t.required("Model name", a.Model, false); err != nil {
-		return err
-	}
-	if a.BaseURL, err = t.ask("API Base URL (optional)", a.BaseURL, false); err != nil {
-		return err
-	}
-	modes := []string{"raw", "hybrid", "agent"}
-	d := 1
-	for i, v := range modes {
-		if v == a.Mode {
-			d = i
-		}
-	}
-	n, err := t.choice("Default operation mode", modes, d)
-	if err != nil {
-		return err
-	}
-	a.Mode = modes[n]
-	languages := []string{"auto", "zh", "en", "ja"}
-	d = 0
+	a.Mode = ""
+	languages := []string{"zh", "en", "ja"}
+	d := 0
 	for i, v := range languages {
 		if v == a.Language {
 			d = i
 		}
 	}
-	n, err = t.choice("AI output language", languages, d)
+	n, err := t.choice("Main reading language", languages, d)
 	if err != nil {
 		return err
 	}
 	a.Language = languages[n]
+	if a.APIKey == "" && os.Getenv("DEEPSEEK_API_KEY") == "" {
+		if a.APIKey, err = t.required("AI API Key (DeepSeek by default)", "", true); err != nil {
+			return err
+		}
+	}
+	advanced, err := t.yes("Edit advanced AI connection settings?", false)
+	if err != nil {
+		return err
+	}
+	if advanced {
+		if a.APIKey, err = t.ask("API Key", a.APIKey, true); err != nil {
+			return err
+		}
+		if a.BaseURL, err = t.ask("OpenAI-compatible API Base URL (empty = DeepSeek)", a.BaseURL, false); err != nil {
+			return err
+		}
+		if a.Model, err = t.required("Model name", a.Model, false); err != nil {
+			return err
+		}
+	}
 	c.AI = a
 	return nil
 }

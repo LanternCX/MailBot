@@ -55,12 +55,20 @@ func (s *Service) botLoop(ctx context.Context, t *Telegram) {
 	defer func() { cancel(); wg.Wait() }()
 	failures := 0
 	registered := false
+	registeredLanguage := ""
 	var registerAttempt time.Time
 	for ctx.Err() == nil {
+		if registeredLanguage != s.uiLanguage() {
+			registered = false
+		}
 		if !registered && time.Since(registerAttempt) > time.Minute {
 			registerAttempt = time.Now()
-			commands := []map[string]string{{"command": "settings", "description": "Open settings dashboard"}, {"command": "rules", "description": "View / manage persona rules"}, {"command": "ai", "description": "Reply to a message to analyze with AI"}, {"command": "help", "description": "Show help"}, {"command": "status", "description": "Show service health"}}
+			language := s.uiLanguage()
+			commands := []map[string]string{{"command": "settings", "description": uiString(language, "settings")}, {"command": "help", "description": uiString(language, "help")}, {"command": "status", "description": uiString(language, "status")}}
 			registered = t.call(ctx, "setMyCommands", map[string]any{"commands": commands}, nil) == nil
+			if registered {
+				registeredLanguage = language
+			}
 		}
 		pollTimeout := t.config.Timeout - 5
 		if pollTimeout < 1 {
@@ -138,31 +146,25 @@ func (s *Service) handleUpdate(ctx context.Context, t *Telegram, u update, jobs 
 	arg := strings.TrimSpace(strings.TrimPrefix(m.Text, fields[0]))
 	switch command {
 	case "/start", "/help":
-		return t.sendCard(ctx, Card{HTML: true, Text: "🤖 <b>MailBot Help</b>\n/settings — Language &amp; operation mode\n/rules — View / manage persona rules\n/ai — Reply to a message to analyze with AI\n/status — Service health\n\nRaw: forward only\nHybrid: preview with on-demand AI\nAgent: automatic AI summary\n\nUse the CLI or config.json to change AI on/off."}, 0)
+		return t.sendCard(ctx, Card{HTML: true, Text: "<b>MailBot</b>\n" + s.tr("intro")}, 0)
 	case "/status":
 		return t.send(ctx, s.Status(), nil)
 	case "/settings":
 		return t.sendCard(ctx, s.settingsCard("main"), 0)
 	case "/mode":
-		if arg == "" {
-			return t.sendCard(ctx, s.settingsCard("main"), 0)
-		}
-		return s.setMode(ctx, t, arg)
+		return t.send(ctx, s.tr("retired"), nil)
 	case "/language":
 		return s.setLanguage(ctx, t, arg)
 	case "/rules":
-		return s.rulesCommand(ctx, t, arg)
+		return t.send(ctx, s.tr("retired"), nil)
 	case "/ai":
 		if m.Reply == nil {
-			return t.send(ctx, "⚠️ Please reply to a message before using /ai to analyze it.", nil)
+			return t.send(ctx, s.tr("reply_required"), nil)
 		}
 		if m.Reply.Text == "" {
-			return t.send(ctx, "⚠️ The replied message has no text to analyze.", nil)
+			return t.send(ctx, s.tr("no_text"), nil)
 		}
 		return s.enqueueAI(ctx, t, Email{Subject: "(Manual Analysis)", Body: m.Reply.Text}, "manual", m.Reply.ID, jobs)
-	}
-	if !strings.HasPrefix(command, "/") {
-		return s.continueRules(ctx, t, m.Text)
 	}
 	return nil
 }
@@ -174,57 +176,64 @@ func (s *Service) handleCallback(ctx context.Context, t *Telegram, cq *callback,
 		_ = t.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": cq.ID, "text": text}, nil)
 	}
 	switch data {
+	case "settings_ui":
+		ack("")
+		return t.editCard(ctx, id, s.settingsCard("ui_language"))
 	case "settings_lang":
 		ack("")
 		return t.editCard(ctx, id, s.settingsCard("language"))
 	case "settings_mode":
 		ack("")
-		return t.editCard(ctx, id, s.settingsCard("mode"))
+		return t.editCard(ctx, id, s.settingsCard("main"))
 	case "settings_back":
 		ack("")
 		return t.editCard(ctx, id, s.settingsCard("main"))
 	case "settings_close", "rules_close":
-		ack("Closed")
+		ack(s.tr("close"))
 		return t.call(ctx, "deleteMessage", map[string]any{"chat_id": t.config.ChatID, "message_id": id}, nil)
 	case "rules_add":
-		ack("Send me the rule text")
-		return s.beginRules(ctx, t, "add")
+		ack(s.tr("retired"))
+		return nil
 	case "rules_delete":
-		ack("Send a rule number to delete")
-		return s.beginRules(ctx, t, "delete")
+		ack(s.tr("retired"))
+		return nil
+	}
+	if strings.HasPrefix(data, "ui_lang_") {
+		language := strings.TrimPrefix(data, "ui_lang_")
+		if language != "zh" && language != "en" && language != "ja" {
+			ack(s.tr("invalid"))
+			return nil
+		}
+		if language == s.uiLanguage() {
+			ack(s.tr("already"))
+			return nil
+		}
+		if err := s.persistSetting("ui_language", language); err != nil {
+			ack(s.tr("save_error"))
+			return err
+		}
+		ack(s.tr("saved"))
+		return t.editCard(ctx, id, s.settingsCard("main"))
 	}
 	if strings.HasPrefix(data, "lang_") || strings.HasPrefix(data, "language:") {
 		language := strings.TrimPrefix(strings.TrimPrefix(data, "lang_"), "language:")
 		if !validLanguage(language) {
-			ack("Invalid language")
+			ack(s.tr("invalid"))
 			return nil
 		}
 		if language == s.store.Setting("language", s.config.AI.Language) {
-			ack("Already set to " + languageLabels[language])
+			ack(s.tr("already"))
 			return nil
 		}
 		if err := s.persistSetting("language", language); err != nil {
-			ack("Unable to save language; please retry")
+			ack(s.tr("save_error"))
 			return err
 		}
-		ack("✅ Language set to " + languageLabels[language])
+		ack(s.tr("saved"))
 		return t.editCard(ctx, id, s.settingsCard("main"))
 	}
 	if strings.HasPrefix(data, "mode_") || strings.HasPrefix(data, "mode:") {
-		mode := strings.TrimPrefix(strings.TrimPrefix(data, "mode_"), "mode:")
-		if !validMode(mode) {
-			ack("Invalid mode")
-			return nil
-		}
-		if mode == s.mode() {
-			ack("Already in " + mode + " mode")
-			return nil
-		}
-		if err := s.persistSetting("mode", mode); err != nil {
-			ack("Unable to save mode; please retry")
-			return err
-		}
-		ack("✅ Switched to " + mode)
+		ack(s.tr("retired"))
 		return t.editCard(ctx, id, s.settingsCard("main"))
 	}
 	action, emailID := "", ""
@@ -236,16 +245,16 @@ func (s *Service) handleCallback(ctx context.Context, t *Telegram, cq *callback,
 		}
 	}
 	if action == "" {
-		ack("Unknown action")
+		ack(s.tr("unknown"))
 		return nil
 	}
-	ack("Loading " + action + "…")
+	ack(s.tr("loading"))
 	e, err := s.store.EmailForTarget(emailID, t.key)
 	if err != nil {
-		return t.editCard(ctx, id, Card{Text: "⚠️ Email cache expired; cannot load this email."})
+		return t.editCard(ctx, id, Card{Text: s.tr("expired")})
 	}
 	if action == "original" {
-		return t.sendCard(ctx, originalCard(e), id)
+		return t.sendCard(ctx, originalCard(e, s.uiLanguage()), id)
 	}
 	return s.enqueueAI(ctx, t, e, action, id, jobs)
 }
@@ -255,41 +264,42 @@ var languageLabels = map[string]string{"zh": "🇨🇳 中文", "en": "🇺🇸 
 func validLanguage(v string) bool { _, ok := languageLabels[v]; return ok }
 func validMode(v string) bool     { return v == "raw" || v == "hybrid" || v == "agent" }
 func (s *Service) settingsCard(page string) Card {
-	mode := s.mode()
-	language := s.store.Setting("language", s.config.AI.Language)
+	language := s.readingLanguage()
 	languageLabel := languageLabels[language]
 	if languageLabel == "" {
 		languageLabel = escape(language)
 	}
-	back := []button{{Text: "🔙 Back", Data: "settings_back"}}
-	if page == "language" {
+	back := []button{{Text: s.tr("back"), Data: "settings_back"}}
+	if page == "language" || page == "ui_language" {
+		prefix, title := "lang_", s.tr("ai")
+		if page == "ui_language" {
+			language = s.uiLanguage()
+			prefix = "ui_lang_"
+			title = s.tr("ui")
+		}
 		rows := [][]button{}
 		row := []button{}
-		for _, code := range []string{"zh", "en", "ja", "auto"} {
+		for _, code := range []string{"zh", "en", "ja"} {
 			label := languageLabels[code]
 			if code == language {
 				label = "✅ " + label
 			}
-			row = append(row, button{Text: label, Data: "lang_" + code})
+			row = append(row, button{Text: label, Data: prefix + code})
 			if len(row) == 2 {
 				rows = append(rows, row)
 				row = nil
 			}
 		}
-		return Card{Text: "🌐 <b>Language Settings</b>\n\nCurrent: ✅ <b>" + languageLabel + "</b>\n\nSelect output language:", HTML: true, Buttons: append(rows, back)}
-	}
-	if page == "mode" {
-		rows := [][]button{}
-		for _, v := range []string{"raw", "hybrid", "agent"} {
-			label := strings.ToUpper(v[:1]) + v[1:]
-			if mode == v {
-				label = "✅ " + label
-			}
-			rows = append(rows, []button{{Text: label, Data: "mode_" + v}})
+		if len(row) > 0 {
+			rows = append(rows, row)
 		}
-		return Card{Text: "⚙️ <b>Operation Mode</b>\n\nCurrent: ✅ <b>" + mode + "</b>\n\nSelect mode:", HTML: true, Buttons: append(rows, back)}
+		return Card{Text: "🌐 <b>" + title + "</b>\n\n" + s.tr("choose"), HTML: true, Buttons: append(rows, back)}
 	}
-	return Card{Text: "⚙️ <b>MailBot Settings</b>\n\n🌐 Language: <b>" + languageLabel + "</b>\n📋 Mode: <b>" + mode + "</b>\nUse the CLI or config.json to change AI on/off.", HTML: true, Buttons: [][]button{{{Text: "🌐 Language >", Data: "settings_lang"}}, {{Text: "⚙️ Mode: " + mode + " >", Data: "settings_mode"}}, {{Text: "❌ Close", Data: "settings_close"}}}}
+	ai := s.tr("disabled")
+	if s.config.AI.Enabled {
+		ai = s.tr("enabled")
+	}
+	return Card{Text: "⚙️ <b>MailBot · " + s.tr("settings") + "</b>\n\n" + s.tr("ui") + ": <b>" + languageLabels[s.uiLanguage()] + "</b>\n" + s.tr("ai") + ": <b>" + languageLabel + "</b>\n" + ai, HTML: true, Buttons: [][]button{{{Text: s.tr("ui"), Data: "settings_ui"}, {Text: s.tr("ai"), Data: "settings_lang"}}, {{Text: s.tr("close"), Data: "settings_close"}}}}
 }
 
 func (s *Service) persistSetting(key, value string) error {
@@ -323,12 +333,12 @@ func (s *Service) setLanguage(ctx context.Context, t *Telegram, v string) error 
 	if err := s.persistSetting("language", v); err != nil {
 		return err
 	}
-	return t.send(ctx, "Language: "+v, nil)
+	return t.send(ctx, s.tr("saved")+": "+v, nil)
 }
 
 func (s *Service) enqueueAI(ctx context.Context, t *Telegram, e Email, action string, replyID int, jobs chan<- func()) error {
 	if !s.config.AI.Enabled {
-		return t.send(ctx, "AI is disabled.", nil)
+		return t.send(ctx, s.tr("disabled"), nil)
 	}
 	job := func() {
 		select {
@@ -340,17 +350,17 @@ func (s *Service) enqueueAI(ctx context.Context, t *Telegram, e Email, action st
 		t.typing(ctx)
 		a, err := s.analyze(ctx, e)
 		if err != nil {
-			_ = t.sendCard(ctx, Card{Text: "AI analysis failed. Try again later."}, replyID)
+			_ = t.sendCard(ctx, Card{Text: s.tr("ai_error")}, replyID)
 			return
 		}
-		card := summaryCard(a)
+		card := summaryCard(a, s.uiLanguage())
 		switch action {
 		case "manual":
-			card = manualAnalysisCard(a)
+			card = manualAnalysisCard(a, s.uiLanguage())
 		case "translate":
-			card = Card{Text: "🌐 <b>Translation</b>\n⚠️ No translation available.", HTML: true}
+			card = Card{Text: "🌐 <b>" + s.tr("translation") + "</b>\n" + s.tr("no_translation"), HTML: true}
 			if a.Translation != nil && *a.Translation != "" {
-				card.Text = "🌐 <b>Translation</b>\n" + escape(*a.Translation)
+				card.Text = "🌐 <b>" + s.tr("translation") + "</b>\n" + escape(*a.Translation)
 			}
 		}
 		if action != "manual" {
@@ -364,16 +374,16 @@ func (s *Service) enqueueAI(ctx context.Context, t *Telegram, e Email, action st
 	case jobs <- job:
 		return nil
 	default:
-		return t.send(ctx, "AI is busy. Try again later.", nil)
+		return t.send(ctx, s.tr("ai_busy"), nil)
 	}
 }
 
 func (s *Service) Status() string {
 	n, err := s.store.Pending()
 	if err != nil {
-		return "State database unavailable."
+		return s.tr("database_error")
 	}
-	text := fmt.Sprintf("MailBot\nMode: %s\nPending deliveries: %d", s.mode(), n)
+	text := fmt.Sprintf("MailBot\n%s: %t\n%s: %s\n%s: %s\n%s: %d", s.tr("summary"), s.config.AI.Enabled, s.tr("ui"), s.uiLanguage(), s.tr("ai"), s.readingLanguage(), s.tr("pending"), n)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, a := range s.config.Accounts {
@@ -384,19 +394,19 @@ func (s *Service) Status() string {
 			mailbox := a
 			mailbox.Folders = []string{folder}
 			key := mailboxStatusKey(mailbox)
-			last := "never"
+			last := s.tr("never")
 			if v := s.lastPoll[key]; !v.IsZero() {
 				last = v.Format(time.RFC3339)
 			}
-			text += fmt.Sprintf("\n%s: %s · last successful check: %s", key, s.status[key], last)
+			text += fmt.Sprintf("\n%s: %s · %s: %s", key, s.status[key], s.tr("last_check"), last)
 		}
 	}
 	for i, t := range s.telegrams {
-		last := "never"
+		last := s.tr("never")
 		if v := s.lastSend[t.key]; !v.IsZero() {
 			last = v.Format(time.RFC3339)
 		}
-		text += fmt.Sprintf("\nTarget %d last delivery: %s", i+1, last)
+		text += "\n" + s.tr("last_delivery", i+1, last)
 	}
 	return text
 }

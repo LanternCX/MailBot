@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,11 +32,16 @@ type Service struct {
 	lastPoll      map[string]time.Time
 	lastSend      map[string]time.Time
 	aiSlots       chan struct{}
+	readingSlots  chan struct{}
+	readingOnce   sync.Once
 	lock          *flock.Flock
 	deliveryLocks sync.Map
 }
 
 func NewService(c Config, configPath string) (*Service, error) {
+	if err := c.Reader.validate(); err != nil {
+		return nil, err
+	}
 	enabled := 0
 	for _, n := range c.Notifiers {
 		if n.Enabled {
@@ -119,6 +125,9 @@ func (s *Service) Run(ctx context.Context) error {
 			}
 		}()
 	}
+	if s.config.Reader.PublicURL != "" {
+		start(func() { s.readerLoop(ctx) })
+	}
 	for _, a := range s.config.Accounts {
 		if !a.Enabled {
 			continue
@@ -192,6 +201,9 @@ func (s *Service) initializeSettings() error {
 		mode = "raw"
 	}
 	if err := s.store.Set("mode", mode); err != nil {
+		return err
+	}
+	if err := s.store.Set("ui_language", s.config.UILanguage); err != nil {
 		return err
 	}
 	return s.store.Set("language", s.config.AI.Language)
@@ -306,33 +318,18 @@ func (s *Service) deliveryLane(ctx context.Context, t *Telegram, priority bool) 
 }
 
 func (s *Service) deliver(ctx context.Context, t *Telegram, d *Delivery) error {
-	mode := s.mode()
+	if d.Text == "" && s.config.Reader.PublicURL != "" {
+		token, err := s.store.readingToken(d.Email.ID)
+		if err != nil {
+			return err
+		}
+		d.Text = encodeCard(s.notificationCard(ctx, d.Email, strings.TrimRight(s.config.Reader.PublicURL, "/")+"/read/"+token))
+		if err := s.store.SaveText(d.ID, d.Text); err != nil {
+			return err
+		}
+	}
 	if d.Text == "" {
-		card := Card{Text: rawText(d.Email)}
-		language := s.store.Setting("language", s.config.AI.Language)
-		urgent := verificationMail(d.Email)
-		if urgent {
-			card = originalCard(d.Email)
-		}
-		if mode == "hybrid" && !urgent {
-			card = hybridCard(d.Email, language)
-		}
-		if mode == "agent" && !urgent {
-			select {
-			case s.aiSlots <- struct{}{}:
-				a, err := s.analyze(ctx, d.Email)
-				<-s.aiSlots
-				if err == nil {
-					card = summaryCard(a)
-					card.Buttons = mailButtons(d.Email, "agent", a.SourceLanguage, language)
-				} else {
-					slog.Warn("AI failed; forwarding original", "email_id", d.Email.ID)
-					card.Buttons = mailButtons(d.Email, "agent", detectLanguage(d.Email.Body), language)
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
+		card := s.notificationCard(ctx, d.Email, "")
 		d.Text = encodeCard(card)
 		if err := s.store.SaveText(d.ID, d.Text); err != nil {
 			return err

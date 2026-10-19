@@ -3,24 +3,53 @@ package mailbot
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
-	PollInterval    int        `json:"poll_interval"`
-	MaxRetries      int        `json:"max_retries"`
-	LogLevel        string     `json:"log_level"`
-	StatePath       string     `json:"state_path"`
-	NetworkTimeout  int        `json:"network_timeout"`
-	UnreadOnly      bool       `json:"unread_only"`
-	MarkSeen        bool       `json:"mark_seen"`
-	MaxMessageBytes int64      `json:"max_message_bytes,omitempty"`
-	Accounts        []Account  `json:"accounts"`
-	Notifiers       []Notifier `json:"notifiers"`
-	Proxy           *Proxy     `json:"proxy"`
-	AI              AIConfig   `json:"ai"`
+	UILanguage      string       `json:"ui_language,omitempty"`
+	PollInterval    int          `json:"poll_interval"`
+	MaxRetries      int          `json:"max_retries"`
+	LogLevel        string       `json:"log_level"`
+	StatePath       string       `json:"state_path"`
+	NetworkTimeout  int          `json:"network_timeout"`
+	UnreadOnly      bool         `json:"unread_only"`
+	MarkSeen        bool         `json:"mark_seen"`
+	MaxMessageBytes int64        `json:"max_message_bytes,omitempty"`
+	Accounts        []Account    `json:"accounts"`
+	Notifiers       []Notifier   `json:"notifiers"`
+	Proxy           *Proxy       `json:"proxy"`
+	AI              AIConfig     `json:"ai"`
+	Reader          ReaderConfig `json:"reader"`
+}
+
+type ReaderConfig struct {
+	Listen    string `json:"listen"`
+	PublicURL string `json:"public_url"`
+}
+
+func (r ReaderConfig) validate() error {
+	if r.PublicURL == "" && r.Listen == "" {
+		return nil
+	}
+	u, err := url.Parse(r.PublicURL)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.EscapedPath() != "" && u.EscapedPath() != "/") {
+		return fmt.Errorf("reader.public_url must be an HTTPS origin, e.g. https://mail.example.com")
+	}
+	_, port, err := net.SplitHostPort(r.Listen)
+	if err != nil {
+		return fmt.Errorf("reader.listen must be host:port")
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("reader.listen requires a port between 1 and 65535")
+	}
+	return nil
 }
 
 type Account struct {
@@ -103,7 +132,7 @@ type AIConfig struct {
 	APIKey   string `json:"api_key"`
 	Model    string `json:"model"`
 	BaseURL  string `json:"base_url"`
-	Mode     string `json:"default_mode"`
+	Mode     string `json:"default_mode,omitempty"` // Accepted for old configurations; automatic reading ignores it.
 	Language string `json:"language"`
 }
 
@@ -114,6 +143,12 @@ func LoadConfig(path string) (Config, error) {
 		return c, err
 	}
 	if err = json.Unmarshal(b, &c); err != nil {
+		return c, err
+	}
+	if c.UILanguage != "" && c.UILanguage != "zh" && c.UILanguage != "en" && c.UILanguage != "ja" {
+		return c, fmt.Errorf("ui_language must be zh, en or ja")
+	}
+	if err = c.Reader.validate(); err != nil {
 		return c, err
 	}
 	if c.PollInterval < 10 || c.MaxRetries < 1 || c.NetworkTimeout < 1 || c.MaxMessageBytes < 0 {
@@ -169,9 +204,6 @@ func LoadConfig(path string) (Config, error) {
 	default:
 		return c, fmt.Errorf("invalid log_level")
 	}
-	if c.AI.Mode != "raw" && c.AI.Mode != "hybrid" && c.AI.Mode != "agent" {
-		return c, fmt.Errorf("invalid AI mode")
-	}
 	if c.AI.Enabled {
 		if _, err := buildAIRequest(c.AI, "", ""); err != nil {
 			return c, err
@@ -190,7 +222,7 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func DefaultConfig() Config {
-	return Config{PollInterval: 60, MaxRetries: 3, LogLevel: "INFO", NetworkTimeout: 30, UnreadOnly: true, MarkSeen: true, StatePath: "mailbot.sqlite3", Accounts: []Account{}, Notifiers: []Notifier{}, AI: AIConfig{Provider: "deepseek", Model: "deepseek-chat", Mode: "hybrid", Language: "auto"}}
+	return Config{PollInterval: 60, MaxRetries: 3, LogLevel: "INFO", NetworkTimeout: 30, UnreadOnly: true, MarkSeen: true, StatePath: "mailbot.sqlite3", Accounts: []Account{}, Notifiers: []Notifier{}, AI: AIConfig{Provider: "deepseek", Model: "deepseek-chat", Language: "zh"}}
 }
 
 // SaveConfig atomically replaces configuration with owner-only permissions.
@@ -243,6 +275,13 @@ func UpdateAISettings(path string, values map[string]string) error {
 		ai = map[string]any{}
 	}
 	for key, value := range values {
+		if key == "ui_language" {
+			c[key], err = json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		ai[key] = value
 	}
 	c["ai"], err = json.Marshal(ai)

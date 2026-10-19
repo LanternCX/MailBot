@@ -8,8 +8,8 @@ MailBot forwards new messages from multiple IMAP mailboxes to Telegram, with opt
 
 - IMAP IDLE watches each account and folder on its own connection, with reconnect catch-up and polling fallback.
 - Locally recognized verification emails bypass AI and send their full text through a separate delivery worker, sharing Telegram rate limits.
-- **Raw:** 50-character preview. **Hybrid:** short/code messages use a preview; long messages offer on-demand summary, original and conditional translation. **Agent:** automatic summary with original and translation controls.
-- Telegram settings submenus, conversational rule management, and reply-based `/ai` analysis.
+- Automatic concise summaries in your main language, full HTML mail reading and on-demand translation with persistent caching. AI failures preserve the original notification.
+- Telegram settings keep interface language and AI output language separate; model and endpoint settings are advanced options. No mode or custom-rule setup is needed.
 - Interactive account, bot, AI and proxy setup, including IMAP and Telegram connection tests.
 - DeepSeek AI through the OpenAI-compatible Chat Completions API.
 - Durable queue and checkpoints, retry after failures, restart recovery, multipart progress, rotating logs and a systemd unit.

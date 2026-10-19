@@ -13,9 +13,10 @@ import (
 )
 
 type Card struct {
-	Text    string     `json:"text"`
-	HTML    bool       `json:"html,omitempty"`
-	Buttons [][]button `json:"buttons,omitempty"`
+	DisablePreview bool       `json:"disable_preview,omitempty"`
+	Text           string     `json:"text"`
+	HTML           bool       `json:"html,omitempty"`
+	Buttons        [][]button `json:"buttons,omitempty"`
 }
 
 var codePattern = regexp.MustCompile(`(?i)(验证码|verification\s*code|登录|login|sign.?in|code\s*[:：])`)
@@ -129,45 +130,53 @@ func hybridCard(e Email, language string) Card {
 }
 
 var categoryIcons = map[string]string{"verification_code": "🔑", "notification": "📢", "billing": "💰", "promotion": "📣", "personal": "✉️"}
-var priorityLabels = map[int]string{1: "🔴 Urgent", 2: "🟠 High", 3: "🟡 Medium", 4: "🔵 Low", 5: "⚪ Lowest"}
 
-func summaryCard(a Analysis) Card {
+func summaryCard(a Analysis, languages ...string) Card {
+	language := "en"
+	if len(languages) > 0 {
+		language = languages[0]
+	}
 	icon := categoryIcons[a.Category]
 	if icon == "" {
 		icon = "📧"
 	}
-	priority := priorityLabels[a.Priority]
-	if priority == "" {
-		priority = priorityLabels[3]
-	}
-	text := fmt.Sprintf("🤖 <b>AI Summary</b>  %s %s  |  %s\n💡 %s", icon, html.EscapeString(a.Category), priority, html.EscapeString(a.Summary))
+	text := fmt.Sprintf("🤖 <b>%s</b>  %s %s\n💡 %s", uiString(language, "ai_summary"), icon, html.EscapeString(a.Category), html.EscapeString(a.Summary))
 	if a.Code != nil && *a.Code != "" {
-		text += "\n🔑 Code: <code>" + html.EscapeString(*a.Code) + "</code>"
+		text += "\n🔑 " + uiString(language, "code") + ": <code>" + html.EscapeString(*a.Code) + "</code>"
 	}
 	return Card{Text: text, HTML: true}
 }
 
-func originalCard(e Email) Card {
-	text := "📧 <b>Original Email</b>\n👤 From: " + html.EscapeString(e.Sender) + "\n📌 Subject: " + html.EscapeString(e.Subject)
+func originalCard(e Email, languages ...string) Card {
+	language := "en"
+	if len(languages) > 0 {
+		language = languages[0]
+	}
+	text := "📧 <b>" + uiString(language, "mail") + "</b>\n👤 " + uiString(language, "from") + ": " + html.EscapeString(e.Sender) + "\n📌 " + uiString(language, "subject") + ": " + html.EscapeString(e.Subject)
 	if !e.Date.IsZero() {
-		text += "\n🕐 Date: " + e.Date.Format("2006-01-02 15:04:05")
+		text += "\n🕐 " + uiString(language, "date") + ": " + e.Date.Format("2006-01-02 15:04:05")
 	}
-	text += "\n\n📝 <b>Content:</b>\n" + html.EscapeString(e.Body) + webAnchor(e.WebLink)
-	return Card{Text: text, HTML: true}
+	text += "\n\n📝 <b>" + uiString(language, "content") + ":</b>\n" + html.EscapeString(e.Body) + webAnchor(e.WebLink)
+	card := Card{Text: text, HTML: true}
+	if code := verificationCode(e); code != "" {
+		card.Text = uiString(language, "code") + ": <code>" + html.EscapeString(code) + "</code>\n\n" + card.Text
+		card.Buttons = [][]button{{{Text: uiString(language, "copy"), CopyText: &copyText{Text: code}}}}
+	}
+	return card
 }
 
-func manualAnalysisCard(a Analysis) Card {
+func manualAnalysisCard(a Analysis, languages ...string) Card {
+	language := "en"
+	if len(languages) > 0 {
+		language = languages[0]
+	}
 	icon := categoryIcons[a.Category]
 	if icon == "" {
 		icon = "📧"
 	}
-	priority := priorityLabels[a.Priority]
-	if priority == "" {
-		priority = priorityLabels[3]
-	}
-	text := fmt.Sprintf("🤖 <b>AI Analysis</b>\n\n%s Category: <b>%s</b>\n📊 Priority: %s\n\n💡 Summary:\n%s", icon, html.EscapeString(a.Category), priority, html.EscapeString(a.Summary))
+	text := fmt.Sprintf("🤖 <b>%s</b>\n\n%s %s: <b>%s</b>\n\n💡 %s:\n%s", uiString(language, "ai_analysis"), icon, uiString(language, "category"), html.EscapeString(a.Category), uiString(language, "ai_summary"), html.EscapeString(a.Summary))
 	if a.Code != nil && *a.Code != "" {
-		text += "\n\n🔑 Code: <code>" + html.EscapeString(*a.Code) + "</code>"
+		text += "\n\n🔑 " + uiString(language, "code") + ": <code>" + html.EscapeString(*a.Code) + "</code>"
 	}
 	return Card{Text: text, HTML: true}
 }

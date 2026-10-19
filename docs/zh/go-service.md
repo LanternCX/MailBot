@@ -38,7 +38,7 @@ Telegram 已收到消息但响应丢失，或本地进度保存失败时仍可�
 
 默认只转发新 UID 中仍未读的邮件；如需补抓已在其他客户端读过的新邮件，设置 `unread_only: false`。首次基线和 UIDVALIDITY 重置仍会跳过当前已有邮件，重置后需手动核对。旧消息的 UID 按钮缓存没有持久化，不能从 Python 进程自动迁移；Go 新消息的按钮跨重启有效。
 
-网络封锁、DNS 错误或失效的代理不能通过重写消除。正式切换前在部署机器验证 Telegram 连接、邮箱登录、三种模式、规则修改、重启后补抓和断网后补发。仓库自动测试使用本地 IMAP / HTTP / 代理，不读取生产密钥。
+网络封锁、DNS 错误或失效的代理不能通过重写消除。正式切换前在部署机器验证 Telegram 连接、邮箱登录、自动概括、按需翻译、语言设置、重启后补抓和断网后补发。仓库自动测试使用本地 IMAP / HTTP / 代理，不读取生产密钥。
 
 ## systemd
 
@@ -50,13 +50,12 @@ sudo install -m 755 dist/mailbot /usr/local/bin/mailbot
 sudo install -d -o mailbot -g mailbot -m 700 /etc/mailbot /var/lib/mailbot
 sudo install -o mailbot -g mailbot -m 600 config.json /etc/mailbot/config.json
 # 设置 state_path 为 /var/lib/mailbot/mailbot.sqlite3
-# 如有规则，将 rules.md 放入 /etc/mailbot/，所有者设为 mailbot
 sudo install -m 644 deploy/mailbot.service /etc/systemd/system/mailbot.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now mailbot
 sudo journalctl -u mailbot -f
 ```
 
-配置目录必须允许运行用户写入，供 Telegram 设置、规则和轮转日志使用。服务单元仅放开配置与状态目录，使用专门用户并在异常退出后重启。SIGINT / SIGTERM 会取消网络请求并等待任务退出。
+配置目录必须允许运行用户写入，供 Telegram 设置和轮转日志使用。服务单元仅放开配置与状态目录，使用专门用户并在异常退出后重启。SIGINT / SIGTERM 会取消网络请求并等待任务退出。
 
 `/status` 与每分钟健康日志显示各文件夹最近成功检查、最近成功投递和积压数量。进程存在不代表网络可用，应监控这些成功时间与持续连接错误。

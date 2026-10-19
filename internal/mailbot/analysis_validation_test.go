@@ -1,34 +1,28 @@
 package mailbot
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAnalysisValidationMatchesLegacyModel(t *testing.T) {
-	for _, tc := range []struct {
-		input    string
-		priority int
-	}{
-		{`{}`, 3}, {`{"priority":3}`, 3}, {`{"priority":3.0}`, 3},
-		{`{"priority":"3"}`, 3}, {`{"priority":"+3.00"}`, 3},
-		{`{"priority":" 03 "}`, 3}, {`{"priority":"0_3"}`, 3},
-		{`{"priority":true}`, 1}, {`{"priority":3e0}`, 3},
-		{`{"source_language":null,"extracted_code":null,"translation":null}`, 3},
-		{`{"Priority":5,"Summary":null}`, 3},
+	for _, input := range []string{
+		`{}`, `{"priority":3}`, `{"priority":null}`, `{"priority":9}`, `{"priority":{}}`,
+		`{"source_language":null,"extracted_code":null,"translation":null}`,
+		`{"Priority":5,"Summary":null}`,
 	} {
-		t.Run(tc.input, func(t *testing.T) {
-			a, err := parseAnalysis(tc.input)
-			if err != nil || a.Priority != tc.priority || a.Summary != "Unable to generate summary" || a.Category != "notification" {
+		t.Run(input, func(t *testing.T) {
+			a, err := parseAnalysis(input)
+			if err != nil || a.Summary != "Unable to generate summary" || a.Category != "notification" {
 				t.Fatalf("legacy valid analysis %+v: %v", a, err)
 			}
 		})
 	}
 	for _, input := range []string{
 		`null`, `[]`, `true`, `"text"`,
-		`{"summary":null}`, `{"category":null}`, `{"priority":null}`,
+		`{"summary":null}`, `{"category":null}`,
 		`{"summary":42}`, `{"category":true}`, `{"source_language":7}`,
 		`{"extracted_code":123456}`, `{"translation":false}`,
-		`{"priority":false}`, `{"priority":0}`, `{"priority":6}`, `{"priority":3.5}`,
-		`{"priority":"3e0"}`, `{"priority":"3."}`, `{"priority":"3.0000000000000001"}`,
-		`{"priority":"3_0"}`, `{"priority":{}}`,
 	} {
 		t.Run(input, func(t *testing.T) {
 			if _, err := parseAnalysis(input); err == nil {
@@ -39,5 +33,22 @@ func TestAnalysisValidationMatchesLegacyModel(t *testing.T) {
 	a, err := parseAnalysis(`{"summary":"summary","category":"custom category","extracted_code":"123456","translation":"translation","source_language":"en","unknown":true}`)
 	if err != nil || a.Summary != "summary" || a.Category != "custom category" || a.Code == nil || *a.Code != "123456" || a.Translation == nil || *a.Translation != "translation" || a.SourceLanguage != "en" {
 		t.Fatalf("legacy string fields lost: %+v %v", a, err)
+	}
+}
+
+func TestAnalysisCardsOmitMailPriority(t *testing.T) {
+	a, err := parseAnalysis(`{"summary":"Your invoice is available","category":"billing","priority":1,"extracted_code":"123456"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, card := range []Card{summaryCard(a), manualAnalysisCard(a)} {
+		if !strings.Contains(card.Text, "Your invoice is available") || !strings.Contains(card.Text, "123456") {
+			t.Fatal("lost useful analysis")
+		}
+		for _, label := range []string{"Priority", "Urgent", "Medium", "🔴", "🟡"} {
+			if strings.Contains(card.Text, label) {
+				t.Fatalf("priority still displayed: %s", card.Text)
+			}
+		}
 	}
 }
